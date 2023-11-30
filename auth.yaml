@@ -65,6 +65,11 @@ credentials:
       name: Wales Millennium Centre
       client_code: WMC
       password: $2b$12$adARVnAVNOX7n8ka/iASEuMI4xe0OaQOwY.MYkt7RBMqs9bBd5sv2
+    nyt:
+      email: linda.yu@made.media
+      name: National Youth Theatre
+      client_code: NYT
+      password: $2b$12$PrGl/B.Qer4VpmDmAeifZOJpYqgKKwR7AXdZS.kIbRr5wwVNBbj3W
 
 cookie:
   expiry_days: 30

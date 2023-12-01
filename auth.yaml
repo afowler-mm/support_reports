@@ -57,7 +57,7 @@ credentials:
       password: $2b$12$hU4moxT7bHVWN/4iUuciOuBLv5Oo0OgVeQpNbTNVLmUu0UXt8hbbe
     gly:
       email: linda.yu@made.media
-      name: Glyndebourne
+      name: Glyndebourne Productions
       client_code: GLY
       password: $2b$12$ywCBXpk1uF4xoUEd53FfbOVXvgPneWgM7HAqS7GxwyvaoBTovYVby
     wmc:

@@ -1,2 +1,3 @@
 gspread
 streamlit_authenticator
+streamlit-cookies-controller

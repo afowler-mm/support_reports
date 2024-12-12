@@ -34,7 +34,6 @@ def display_monthly_report(client_code: str):
         st.error("Company not found for this client code.")
         return
 
-    # Get product options if needed
     product_options = freshdesk_api.get_product_options()
 
     # Fetch time entries for the given month and company
@@ -44,9 +43,8 @@ def display_monthly_report(client_code: str):
         st.write("No time tracked for this month")
         return
 
-    # Convert time entries to DataFrame
     time_entries_df = pd.DataFrame(time_entries_data)
-    # You may need to process this similarly to your old code to get tickets_details
+    product_options = freshdesk_api.get_product_options()
     tickets_details = prepare_tickets_details_from_time_entries(time_entries_data, product_options)
 
     if not tickets_details:
@@ -81,13 +79,13 @@ def prepare_tickets_details_from_time_entries(time_entries_data, product_options
         if ticket_data.get('requester_id'):
             requester = freshdesk_api.get_requester(ticket_data['requester_id'])
             requester_name = requester.get('name', 'Unknown')
-
+        
         product_name = product_options.get(ticket_data.get('product_id'), "Unknown")
 
         # Aggregate time spent
         time_hours = float(entry.get('time_spent_in_seconds', 0)) / 3600.0
-        # Pass time entry details to calculate_billable_time
-        billable_hours = calculate_billable_time(entry, ticket_data, time_hours)
+        # Pass product_options to calculate_billable_time
+        billable_hours = calculate_billable_time(entry, ticket_data, time_hours, product_options)
 
         # Update the details for the ticket
         ticket_detail = details[ticket_id]
@@ -98,6 +96,7 @@ def prepare_tickets_details_from_time_entries(time_entries_data, product_options
         ticket_detail['requester_name'] = requester_name
         ticket_detail['product_name'] = product_name
         ticket_detail['billing_status'] = ticket_data['custom_fields'].get('billing_status', 'Unknown')
+        ticket_detail['change_request'] = ticket_data['custom_fields'].get('change_request', False)
 
     return list(details.values())
 
@@ -122,18 +121,19 @@ def display_time_summary(tickets_details_df, company_data, start_date):
     }
     currency_symbol = currency_map.get(company_data['custom_fields'].get('currency'), "$")
 
-    total_billable_hours = 0 # Placeholder
+    total_billable_hours = tickets_details_df['billable_time_this_month'].sum()
     overage_rate = company_data['custom_fields'].get('contract_hourly_rate', 0)
     carryover = float(carryover_value) if rollover_time else 0
+    inclusive_hours = company_data['custom_fields'].get('inclusive_hours')
 
-    estimated_cost = f"{currency_symbol}{max(total_billable_hours - carryover, 0) * overage_rate:,.2f}" if is_current_or_adjacent_month else f"{currency_symbol}0.00"
+    estimated_cost = f"{currency_symbol}{max(total_billable_hours - carryover - inclusive_hours, 0) * overage_rate:,.2f}" if is_current_or_adjacent_month else f"{currency_symbol}0.00"
 
     time_summary_contents = {
         "Total time tracked": total_time,
         "Of which potentially billable": billable_time,
     }
 
-    inclusive_hours = company_data['custom_fields'].get('inclusive_hours')
+    
     if inclusive_hours and is_current_or_adjacent_month:
         time_summary_contents["Support contract includes"] = f"{inclusive_hours:.0f} h"
     if rollover_time:
@@ -166,7 +166,6 @@ def display_time_summary(tickets_details_df, company_data, start_date):
     _display_tickets_table(tickets_details_df)
 
 def _display_tickets_table(tickets_details_df):
-    # Add a column with the URL based on the ticket_id
     tickets_details_df["ticket_url"] = tickets_details_df["ticket_id"].apply(
         lambda tid: f"https://mademedia.freshdesk.com/support/tickets/{tid}"
     )
@@ -176,15 +175,19 @@ def _display_tickets_table(tickets_details_df):
         "title",
         "time_spent_this_month", 
         "billable_time_this_month", 
-        "requester_name"
+        "requester_name",
+        "product_name",
+        "change_request"
     ]].copy()
 
     display_df.rename(columns={
         "ticket_url": "Ticket",
         "title": "Title",
-        "time_spent_this_month": "Time tracked this month (h)",
-        "billable_time_this_month": "Potentially billable (h)",
-        "requester_name": "Filed by"
+        "time_spent_this_month": "Time tracked",
+        "billable_time_this_month": "Billable time",
+        "requester_name": "Filed by",
+        "product_name": "Product",
+        "change_request": "CR?"
     }, inplace=True)
 
     st.dataframe(

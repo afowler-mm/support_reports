@@ -1,5 +1,6 @@
 import streamlit as st
 from auth import login, logout, get_current_user
+from views import monthly
 
 # Streamlit app configuration
 st.set_page_config(page_title="Support Reporter", page_icon="🧮", layout="wide")
@@ -19,7 +20,7 @@ else:
 
     tab1, tab2 = st.tabs(["Monthly Report", "Ticket Finder"])
     with tab1:
-        st.write(f"Monthly report for {client_code}")
+        monthly.display_monthly_report(client_code)
     with tab2:
         st.write(f"Ticket finder for {client_code}")
         

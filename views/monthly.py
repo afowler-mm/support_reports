@@ -2,16 +2,17 @@ import streamlit as st
 import datetime
 import pandas as pd
 
+from collections import defaultdict
+
 from utils import month_selector
 from apis.freshdesk import freshdesk_api
+from logic import calculate_billable_time
 
 
 def display_monthly_report(client_code: str):
-    st.subheader(f"Monthly report for {client_code}")
 
     # Allow user to pick a month
     selected_month = month_selector()
-    st.write(f"Selected month: {selected_month}")
 
     # Convert selected month (e.g. "January 2024") to YYYY-MM-DD date range
     month_datetime = datetime.datetime.strptime(selected_month, "%B %Y")
@@ -59,16 +60,22 @@ def display_monthly_report(client_code: str):
 
 
 def prepare_tickets_details_from_time_entries(time_entries_data, product_options):
-    """
-    Mimic your old logic:
-    - For each time entry, fetch ticket info
-    - Summarize total and billable time
-    - Attach product names, requester info, etc.
-    """
-    # Placeholder for demonstration. Your real logic might be more complex:
-    details = []
+    details = defaultdict(lambda: {
+        'time_spent_this_month': 0.0,
+        'billable_time_this_month': 0.0,
+        'ticket_id': None,
+        'title': None,
+        'requester_name': "Unknown",
+        'product_name': "Unknown",
+        'billing_status': "Unknown"
+    })
+
     for entry in time_entries_data:
         ticket_id = entry.get('ticket_id')
+        if not ticket_id:
+            continue
+
+        # Get ticket data
         ticket_data = freshdesk_api.get_ticket_data(ticket_id)
         requester_name = "Unknown"
         if ticket_data.get('requester_id'):
@@ -77,35 +84,43 @@ def prepare_tickets_details_from_time_entries(time_entries_data, product_options
 
         product_name = product_options.get(ticket_data.get('product_id'), "Unknown")
 
-        # Convert time spent from seconds to hours
-        time_hours = float(entry.get('time_spent_in_seconds',0))/3600.0
-        # billable_hours = calculate_billable_time(ticket_data, time_hours)
-        billable_hours = ''
+        # Aggregate time spent
+        time_hours = float(entry.get('time_spent_in_seconds', 0)) / 3600.0
+        # Pass time entry details to calculate_billable_time
+        billable_hours = calculate_billable_time(entry, ticket_data, time_hours)
 
-        details.append({
-            'ticket_id': ticket_id,
-            'title': ticket_data.get('subject', 'No subject'),
-            'requester_name': requester_name,
-            'product_name': product_name,
-            'time_spent_this_month': time_hours,
-            'billable_time_this_month': billable_hours,
-            'billing_status': ticket_data['custom_fields'].get('billing_status', 'Unknown')
-        })
+        # Update the details for the ticket
+        ticket_detail = details[ticket_id]
+        ticket_detail['time_spent_this_month'] += time_hours
+        ticket_detail['billable_time_this_month'] += billable_hours
+        ticket_detail['ticket_id'] = ticket_id
+        ticket_detail['title'] = ticket_data.get('subject', 'No subject')
+        ticket_detail['requester_name'] = requester_name
+        ticket_detail['product_name'] = product_name
+        ticket_detail['billing_status'] = ticket_data['custom_fields'].get('billing_status', 'Unknown')
 
-    return details
+    return list(details.values())
 
 def display_time_summary(tickets_details_df, company_data, start_date):
     year, month, _ = start_date.split("-")
 
-    total_time = f"{tickets_details_df['time_spent_this_month'].sum()} h"
-    billable_time = f"{tickets_details_df['billable_time_this_month'].sum()} h"
+    total_time = f"{tickets_details_df['time_spent_this_month'].sum():.1f} h"
+    billable_time = f"{tickets_details_df['billable_time_this_month'].sum():.1f} h"
     carryover_value = 0;
     rollover_time = "{:.1f} h".format(float(carryover_value)) if carryover_value and str(carryover_value).replace(".", "", 1).isdigit() else None
 
     now = datetime.datetime.now()
     start_date_year, start_date_month = map(int, start_date.split("-")[:2])
     is_current_or_adjacent_month = (now.year == start_date_year and abs(now.month - start_date_month) <= 1)
-    currency_symbol = "¢"  # Placeholder
+    
+    currency_map = {
+        "USD": "$",
+        "EUR": "€",
+        "GBP": "£",
+        "AUD": "A$",
+        "CAD": "C$",
+    }
+    currency_symbol = currency_map.get(company_data['custom_fields'].get('currency'), "$")
 
     total_billable_hours = 0 # Placeholder
     overage_rate = company_data['custom_fields'].get('contract_hourly_rate', 0)
@@ -128,6 +143,9 @@ def display_time_summary(tickets_details_df, company_data, start_date):
     if is_current_or_adjacent_month:
         time_summary_contents["Estimated cost this month"] = estimated_cost
 
+    formatted_date = datetime.datetime.strptime(start_date, '%Y-%m-%d').strftime('%B %Y')
+    
+
     columns = st.columns(len(time_summary_contents))
     for col, (k, v) in zip(columns, time_summary_contents.items()):
         col.metric(label=k, value=v)
@@ -144,19 +162,38 @@ def display_time_summary(tickets_details_df, company_data, start_date):
         )
 
     # Display ticket table
-    formatted_date = datetime.datetime.strptime(start_date, '%Y-%m-%d').strftime('%B %Y')
-    st.markdown(f"#### Made Media support tickets with time tracked during {formatted_date} for {company_data['name']}")
+    st.caption(f"Made Media support tickets with time tracked during {formatted_date} for {company_data['name']}")
     _display_tickets_table(tickets_details_df)
 
 def _display_tickets_table(tickets_details_df):
-    tickets_html = "<table>"
-    tickets_html += "<tr><th>Ticket</th><th align='right'>Time tracked this month</th><th align='right'>Potentially billable</th></tr>"
-    for _, ticket in tickets_details_df.iterrows():
-        tickets_html += "<tr>"
-        tickets_html += f"<td><h6 style='padding-bottom:0;margin-bottom:0'><a href='https://mademedia.freshdesk.com/support/tickets/{ticket['ticket_id']}'>{ticket['ticket_id']}</a>: {ticket['title']}</h6><small>Filed by: {ticket['requester_name']}</small></td>"
-        tickets_html += f"<td align='right'>{ticket['time_spent_this_month']} hours</td>"
-        tickets_html += f"<td align='right'>{ticket['billable_time_this_month']} hours</td>"
-        tickets_html += "</tr>"
-    tickets_html += "</table>"
+    # Add a column with the URL based on the ticket_id
+    tickets_details_df["ticket_url"] = tickets_details_df["ticket_id"].apply(
+        lambda tid: f"https://mademedia.freshdesk.com/support/tickets/{tid}"
+    )
 
-    st.markdown(tickets_html, unsafe_allow_html=True)
+    display_df = tickets_details_df[[
+        "ticket_url", 
+        "title",
+        "time_spent_this_month", 
+        "billable_time_this_month", 
+        "requester_name"
+    ]].copy()
+
+    display_df.rename(columns={
+        "ticket_url": "Ticket",
+        "title": "Title",
+        "time_spent_this_month": "Time tracked this month (h)",
+        "billable_time_this_month": "Potentially billable (h)",
+        "requester_name": "Filed by"
+    }, inplace=True)
+
+    st.dataframe(
+        display_df,
+        column_config={
+            "Ticket": st.column_config.LinkColumn(
+                "ID",
+                display_text="tickets/(\\d+)"
+            ),
+        },
+        hide_index=True,
+    )

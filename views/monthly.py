@@ -13,7 +13,7 @@ def display_monthly_report(client_code: str):
     if client_code == "admin":
         companies = freshdesk_api.get_companies()
         company_names = {c['name']: c['custom_fields'].get('company_code') for c in companies}
-        selected_company_name = st.selectbox("Select a company", list(company_names.keys()))
+        selected_company_name = st.selectbox("Select client", list(company_names.keys()))
         client_code = company_names[selected_company_name]
     
     # Allow user to pick a month

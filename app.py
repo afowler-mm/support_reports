@@ -19,16 +19,17 @@ else:
     
     if username == "made" and client_code == "admin":
         # Define the tabs for admin users
-        tabs = st.tabs(["Monthly Report", "Xero Export"])
+        tabs = st.tabs(["Monthly report", "Xero export"])
 
         # Monthly Report Tab
         with tabs[0]:
-            st.subheader("Monthly Report")
+            st.subheader("Monthly report")
+            st.info("Want to give access to a specific company? Add credentials for them [here](https://docs.google.com/spreadsheets/d/11RbGbkxKeIqrjweIClMh2a14hwt1-wWP0tKkAI7gvIQ/edit?gid=0#gid=0).")
             monthly.display_monthly_report(client_code)
 
         # Xero Export Tab
         with tabs[1]:
-            st.subheader("Xero Export")
+            st.subheader("Xero export")
             xero.display_xero_exporter()
 
     else:

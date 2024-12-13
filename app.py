@@ -24,7 +24,7 @@ else:
         # Monthly Report Tab
         with tabs[0]:
             st.subheader("Monthly report")
-            st.info("Want to give access to a specific company? Add credentials for them [here](https://docs.google.com/spreadsheets/d/11RbGbkxKeIqrjweIClMh2a14hwt1-wWP0tKkAI7gvIQ/edit?gid=0#gid=0).")
+            st.info("Want to give access to this report to a client? Add credentials for them [here](https://docs.google.com/spreadsheets/d/11RbGbkxKeIqrjweIClMh2a14hwt1-wWP0tKkAI7gvIQ/edit?gid=0#gid=0).")
             monthly.display_monthly_report(client_code)
 
         # Xero Export Tab

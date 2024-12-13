@@ -117,14 +117,17 @@ def display_time_summary(tickets_details_df, company_data, start_date):
     start_date_year, start_date_month = map(int, start_date.split("-")[:2])
     is_current_or_adjacent_month = (now.year == start_date_year and abs(now.month - start_date_month) <= 1)
     
+    # make the currency labels friendlier
     currency_map = {
         "USD": "$",
         "EUR": "€",
         "GBP": "£",
         "AUD": "A$",
         "CAD": "C$",
+        "NZD": "NZ$",
+        "JPY": "¥",
     }
-    currency_symbol = currency_map.get(company_data['custom_fields'].get('currency'), "$")
+    currency_symbol = currency_map.get(company_data['custom_fields'].get('currency'), company_data['custom_fields'].get('currency', ''))
 
     total_billable_hours = tickets_details_df['billable_time_this_month'].sum()
     overage_rate = company_data['custom_fields'].get('contract_hourly_rate', 0)

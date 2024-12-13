@@ -10,7 +10,12 @@ from logic import calculate_billable_time
 
 
 def display_monthly_report(client_code: str):
-
+    if client_code == "admin":
+        companies = freshdesk_api.get_companies()
+        company_names = {c['name']: c['custom_fields'].get('company_code') for c in companies}
+        selected_company_name = st.selectbox("Select a company", list(company_names.keys()))
+        client_code = company_names[selected_company_name]
+    
     # Allow user to pick a month
     selected_month = month_selector()
 
@@ -158,7 +163,7 @@ def display_time_summary(tickets_details_df, company_data, start_date):
         invoice_tickets_str = ", ".join([f"[#{tid}](https://mademedia.freshdesk.com/support/tickets/{tid})" for tid in invoice_ticket_ids])
         total_invoice_time = invoice_tickets["time_spent_this_month"].sum()
         st.warning(
-            f"Ticket{'s' if num_invoice_tickets > 1 else ''} {invoice_tickets_str} {'are' if num_invoice_tickets > 1 else 'is'} marked 'Invoice' and have {total_invoice_time:.1f} hours tracked this month not included in the above totals."
+            f"Ticket{'s' if num_invoice_tickets > 1 else ''} {invoice_tickets_str} {'are' if num_invoice_tickets > 1 else 'is'} marked 'Invoice' and {'have' if num_invoice_tickets > 1 else 'has'} {total_invoice_time:.1f} hours tracked this month not included in the above totals."
         )
 
     # Display ticket table

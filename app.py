@@ -1,11 +1,12 @@
 import streamlit as st
+
+# Configure Streamlit (must be the first Streamlit command)
+st.set_page_config(page_title="Made Media Support Reporter", page_icon="🧮", layout="wide")
+
 from views.monthly import display_monthly_report
 from views.xero import display_xero_exporter
 from views.ticket_finder import display_ticket_finder
 from auth import login, logout, get_current_user
-
-# Configure Streamlit
-st.set_page_config(page_title="Made Media Support Reporter", page_icon="🧮", layout="wide")
 
 # Initialize session state
 if "logged_in" not in st.session_state:
@@ -20,8 +21,8 @@ else:
     # Sidebar containers
     with st.sidebar:
         # Filters container is rendered first
-        filters_container = st.container(key="filters_container")
-        
+        filters_container = st.container()
+
         # Welcome and logout button container
         with st.container():
             st.header(f"Welcome, {client_code}!")

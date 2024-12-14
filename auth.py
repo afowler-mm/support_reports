@@ -61,10 +61,17 @@ def get_current_user():
     if st.session_state.get("logged_in", False):
         return st.session_state.username, st.session_state.client_code
 
-    # Check cookies for persistent login
-    username = cookies.get('username')
-    client_code = cookies.get('client_code')
-    logged_in = cookies.get('logged_in')
+    # Handle missing cookies gracefully
+    try:
+        # Check cookies for persistent login
+        username = cookies.get('username') or None
+        client_code = cookies.get('client_code') or None
+        logged_in = cookies.get('logged_in') or False
+    except TypeError:
+        # If the cookies object is not properly initialized
+        username = None
+        client_code = None
+        logged_in = False
 
     if logged_in and username and client_code:
         # Restore session state from cookies

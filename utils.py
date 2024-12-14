@@ -29,7 +29,7 @@ def date_range_selector():
     with st.container():
         col1, col2 = st.columns(2)
         with col1:
-            start_date = st.date_input("Start date", value=date.today() - timedelta(days=30))
+            start_date = st.date_input("Start date", value=date.today() - timedelta(days=365))
         with col2:
             end_date = st.date_input("End date", value=date.today())
         return {

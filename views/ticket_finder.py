@@ -10,42 +10,36 @@ def display_ticket_finder(client_code: str, filters_container):
     date_range = date_range_selector()
     start_date, end_date = date_range["start_date"], date_range["end_date"]
 
-    with st.status(
-        "Loading tickets for those dates...", state="running", expanded=True
-    ) as status:
+    with st.spinner("Fetching tickets..."):
         tickets = get_tickets_within_date_range(start_date, end_date)
 
-        if not tickets:
-            st.warning("No tickets found in the selected range.")
-            return
+    if not tickets:
+        st.warning("No tickets found in the selected range.")
+        return
 
-        with filters_container:
-            st.subheader("Filters")
-            if client_code == "admin":
-                status.update(
-                    label="Fetching information about clients...", state="running"
-                )
-                companies = freshdesk_api.get_companies()
-                company_options = {
-                    c["name"]: c["custom_fields"].get("company_code") for c in companies
-                }
-                selected_companies = st.multiselect(
-                    "Select clients", list(company_options.keys())
-                )
-                selected_company_codes = [
-                    company_options[comp] for comp in selected_companies
-                ]
+    with filters_container:
+        st.subheader("Filters")
+        if client_code == "admin":
+            companies = freshdesk_api.get_companies()
+            company_options = {
+                c["name"]: c["custom_fields"].get("company_code") for c in companies
+            }
+            selected_companies = st.multiselect(
+                "Select clients", list(company_options.keys())
+            )
+            selected_company_codes = [
+                company_options[comp] for comp in selected_companies
+            ]
 
-                # Show all tickets if no specific clients are selected
-                if not selected_company_codes:
-                    st.info("No clients selected, showing tickets for all clients.")
-                    selected_company_codes = None
-            else:
-                # Non-admin users can only see their company's tickets
-                selected_company_codes = [client_code]
+            # Show all tickets if no specific clients are selected
+            if not selected_company_codes:
+                st.info("No clients selected, showing tickets for all clients.")
+                selected_company_codes = None
+        else:
+            # Non-admin users can only see their company's tickets
+            selected_company_codes = [client_code]
 
         # Filter tickets by selected companies
-        status.update(label="Filtering tickets...", state="running")
         if selected_company_codes:
             filtered_tickets = [
                 ticket
@@ -171,8 +165,6 @@ def display_ticket_finder(client_code: str, filters_container):
             tickets_df = tickets_df[
                 tickets_df["status_readable"].isin(selected_statuses)
             ]
-
-    status.update(label="Done!", state="complete", expanded=False)
 
     # Display table with clickable links
     st.caption(

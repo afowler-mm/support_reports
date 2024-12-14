@@ -7,7 +7,7 @@ from apis.freshdesk import freshdesk_api
 from logic import calculate_billable_time
 from utils import month_selector
 
-def display_xero_exporter():
+def display_xero_exporter(client_code):
     st.warning('Not recently tested. Use with caution and let Andrew SF know if something needs changing.')
     
     st.info('''
@@ -18,8 +18,7 @@ def display_xero_exporter():
         Please handle these manually for now.
     ''')
 
-    # Month selector using the helper from utils.py
-    selected_month = month_selector(label="Choose a month")
+    selected_month = month_selector(label="Select a month")
     selected_date = datetime.strptime(selected_month, "%B %Y")
     start_date = selected_date.strftime("%Y-%m-%d")
     end_date = (selected_date + relativedelta(months=1) - timedelta(days=1)).strftime("%Y-%m-%d")

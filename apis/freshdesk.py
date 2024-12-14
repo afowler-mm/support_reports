@@ -42,9 +42,9 @@ class FreshdeskAPI:
         return results
 
     @st.cache_resource(ttl=3600, show_spinner=False)
-    def get_company_by_id(self, company_id: int) -> Optional[Dict]:
-        url = f"{self.base_url}/companies/{company_id}"
-        resp = self._get(url)
+    def get_company_by_id(_self, company_id: int) -> Optional[Dict]:
+        url = f"{_self.base_url}/companies/{company_id}"
+        resp = _self._get(url)
         return resp.json()
 
     def get_companies_options(self) -> Dict[str, int]:
@@ -76,27 +76,17 @@ class FreshdeskAPI:
         return results
 
     @st.cache_resource(ttl=3600, show_spinner=False)
-    def get_tickets(self, updated_since: Optional[str]=None, per_page=100, order_by='updated_at', order_type='desc', include='stats,requester,description') -> List[Dict]:
+    def get_tickets(_self, updated_since: Optional[str]=None, per_page=100, order_by='updated_at', order_type='desc', include='stats,requester,description') -> List[Dict]:
         """Get tickets updated since a certain date."""
         if updated_since is None:
             # Default: last 90 days
             date = datetime.datetime.now() - datetime.timedelta(days=90)
-            # Adjust as needed, the old code used a fixed date/time
             date_utc = date.astimezone(datetime.timezone.utc)
             updated_since = date_utc.strftime('%Y-%m-%dT%H:%M:%SZ')
-        url = f"{self.base_url}/tickets/?per_page={per_page}&order_by={order_by}&order_type={order_type}&include={include}&updated_since={updated_since}"
+        url = f"{_self.base_url}/tickets/?per_page={per_page}&order_by={order_by}&order_type={order_type}&include={include}&updated_since={updated_since}"
 
         results = []
-        for page_data in self._get_paginated(url):
-            results.extend(page_data)
-        return results
-
-    @st.cache_resource(ttl=3600, show_spinner=False)
-    def search_tickets(self, query: str) -> List[Dict]:
-        encoded_query = quote(query)
-        url = f"{self.base_url}/search/tickets?query=\"{encoded_query}\""
-        results = []
-        for page_data in self._get_paginated(url):
+        for page_data in _self._get_paginated(url):
             results.extend(page_data)
         return results
 

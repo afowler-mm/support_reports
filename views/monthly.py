@@ -11,6 +11,7 @@ from logic import calculate_billable_time
 
 def display_monthly_report(client_code: str):
     if client_code == "admin":
+        st.info("Want to give a client access to this report? Add credentials for them to [this spreadsheet](https://docs.google.com/spreadsheets/d/11RbGbkxKeIqrjweIClMh2a14hwt1-wWP0tKkAI7gvIQ/edit?gid=0#gid=0).")
         companies = freshdesk_api.get_companies()
         company_names = {c['name']: c['custom_fields'].get('company_code') for c in companies}
         selected_company_name = st.selectbox("Select client", list(company_names.keys()))

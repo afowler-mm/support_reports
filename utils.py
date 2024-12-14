@@ -1,5 +1,5 @@
 import streamlit as st
-from datetime import datetime
+from datetime import date, timedelta, datetime
 from dateutil.relativedelta import relativedelta
 
 def month_selector(years_back: int = 3, label: str = "Select month") -> str:
@@ -25,7 +25,11 @@ def month_selector(years_back: int = 3, label: str = "Select month") -> str:
     selected = st.selectbox(label, options, index=0)
     return selected
 
-# Example usage within a Streamlit app:
-if __name__ == "__main__":
-    chosen_month = month_selector()
-    st.write(f"You selected: {chosen_month}")
+def date_range_selector():
+    with st.container():
+        start_date = st.date_input("Start date", value=date.today() - timedelta(days=30))
+        end_date = st.date_input("End date", value=date.today())
+        return {
+            "start_date": start_date.strftime('%Y-%m-%d'),
+            "end_date": end_date.strftime('%Y-%m-%d')
+        }

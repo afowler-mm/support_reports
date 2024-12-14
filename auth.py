@@ -32,9 +32,14 @@ def login(secrets):
             st.session_state.client_code = client_code
             st.session_state.logged_in = True
             
-            cookies.set('username', username)
-            cookies.set('client_code', client_code)
-            cookies.set('logged_in', True)
+            try:
+                cookies.set('username', username)
+                cookies.set('client_code', client_code)
+                cookies.set('logged_in', True)
+            except Exception as e:
+                st.warning("Unable to set cookies. Your session will not persist after closing the browser.")
+                st.write(f"Error details: {e}")
+
             
             st.rerun()
         else:

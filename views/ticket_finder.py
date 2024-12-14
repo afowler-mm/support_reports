@@ -5,24 +5,28 @@ from utils import date_range_selector
 from logic import status_mapping
 
 
-def display_ticket_finder(client_code: str):
-    if client_code == "admin":
-        companies = freshdesk_api.get_companies()
-        company_options = {c['name']: c['custom_fields'].get('company_code') for c in companies}
-        selected_companies = st.multiselect("Select clients", list(company_options.keys()))
-        selected_company_codes = [company_options[comp] for comp in selected_companies]
-        
-        # Show all tickets if no specific clients are selected
-        if not selected_company_codes:
-            st.info("No clients selected, showing tickets for all clients.")
-            selected_company_codes = None
-    else:
-        # Non-admin users can only see their company's tickets
-        selected_company_codes = [client_code]
+def display_ticket_finder(client_code: str, filters_container):
+    with filters_container:
+    
+        if client_code == "admin":
+            companies = freshdesk_api.get_companies()
+            company_options = {c['name']: c['custom_fields'].get('company_code') for c in companies}
+            selected_companies = st.multiselect("Select clients", list(company_options.keys()))
+            selected_company_codes = [company_options[comp] for comp in selected_companies]
+            
+            # Show all tickets if no specific clients are selected
+            if not selected_company_codes:
+                st.info("No clients selected, showing tickets for all clients.")
+                selected_company_codes = None
+        else:
+            # Non-admin users can only see their company's tickets
+            selected_company_codes = [client_code]
 
-    # Date range selection
-    date_range = date_range_selector()
-    start_date, end_date = date_range["start_date"], date_range["end_date"]
+        # Date range selection
+        date_range = date_range_selector()
+        start_date, end_date = date_range["start_date"], date_range["end_date"]
+        
+        st.divider()
 
     # Fetch and cache tickets
     with st.spinner("Loading tickets..."):
@@ -99,6 +103,7 @@ def display_ticket_finder(client_code: str):
             "updated_at": st.column_config.DatetimeColumn("Updated", format="ddd DD MMM YYYY, HH:mm z"),
         },
         hide_index=True,
+        height=1000
     )
 
 

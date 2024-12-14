@@ -17,8 +17,15 @@ username, client_code = get_current_user()
 if not st.session_state.logged_in:
     login(st.secrets["gcp_service_account"])
 else:
-    st.sidebar.header(f"Welcome, {client_code}!")
-    logout_button = st.sidebar.button("Logout", on_click=logout)
+    # Sidebar containers
+    with st.sidebar:
+        # Filters container is rendered first
+        filters_container = st.container(key="filters_container")
+        
+        # Welcome and logout button container
+        with st.container():
+            st.header(f"Welcome, {client_code}!")
+            st.button("Logout", on_click=logout)
 
     # Define the pages as functions
     def monthly_report():
@@ -27,7 +34,7 @@ else:
 
     def ticket_finder():
         st.title("Ticket finder")
-        display_ticket_finder(client_code)
+        display_ticket_finder(client_code, filters_container)
 
     def xero_export():
         st.title("Xero export")

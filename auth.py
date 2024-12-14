@@ -42,17 +42,18 @@ def login(secrets):
 
 def logout():
     """Handle user logout."""
-    if st.button("Logout"):
-        # Clear session state and remove cookies
-        for key in ['username', 'client_code', 'logged_in']:
-            if key in st.session_state:
-                del st.session_state[key]
-        
-        cookies.remove('username')
-        cookies.remove('client_code')
-        cookies.remove('logged_in')
-        
-        st.rerun()
+    # Clear session state keys
+    st.session_state.pop('username', None)
+    st.session_state.pop('client_code', None)
+    st.session_state.pop('logged_in', None)
+    
+    # Remove cookies
+    cookies.remove('username')
+    cookies.remove('client_code')
+    cookies.remove('logged_in')
+    
+    # Signal rerun
+    st.session_state.trigger_rerun = True
 
 def get_current_user():
     """Retrieve the current user from session state or cookies."""

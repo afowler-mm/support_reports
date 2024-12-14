@@ -1,34 +1,47 @@
 import streamlit as st
+from views.monthly import display_monthly_report
+from views.xero import display_xero_exporter
+from views.ticket_finder import display_ticket_finder
 from auth import login, logout, get_current_user
-from views import monthly, xero, ticket_finder
 
-st.set_page_config(page_title="Made Media support reporter", page_icon="🧮", layout="wide")
+# Configure Streamlit
+st.set_page_config(page_title="Made Media Support Reporter", page_icon="🧮", layout="wide")
 
-# Initialize session state variables
+# Initialize session state
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 
-# Check the user's authentication
+# Authentication
 username, client_code = get_current_user()
 
 if not st.session_state.logged_in:
     login(st.secrets["gcp_service_account"])
 else:
-    st.header(f"Welcome, {client_code}!")
+    st.sidebar.header(f"Welcome, {client_code}!")
+    logout_button = st.sidebar.button("Logout", on_click=logout)
 
-    tabs_config = [
-        {"label": "Monthly report", "view": monthly.display_monthly_report},
-        {"label": "Ticket finder", "view": ticket_finder.display_ticket_finder}
+    # Define the pages as functions
+    def monthly_report():
+        st.title("Monthly report")
+        display_monthly_report(client_code)
+
+    def ticket_finder():
+        st.title("Ticket finder")
+        display_ticket_finder(client_code)
+
+    def xero_export():
+        st.title("Xero export")
+        display_xero_exporter(client_code)
+
+    # Page navigation configuration
+    pages = [
+        st.Page(monthly_report, title="Monthly hours", icon="🧮"),
+        st.Page(ticket_finder, title="Ticket finder", icon="🔍"),
     ]
 
     if username == "made" and client_code == "admin":
-        tabs_config.append({"label": "Xero export", "view": xero.display_xero_exporter})
+        pages.append(st.Page(xero_export, title="Xero export", icon="💸"))
 
-    tabs = st.tabs([tab["label"] for tab in tabs_config])
-
-    for tab, config in zip(tabs, tabs_config):
-        with tab:
-            config["view"](client_code)
-    
-    st.divider()
-    logout()
+    # Navigation
+    selected_page = st.navigation(pages)
+    selected_page.run()

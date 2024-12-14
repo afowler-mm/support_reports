@@ -33,7 +33,7 @@ class FreshdeskAPI:
             else:
                 url = None
 
-    @st.cache_resource(ttl=3600, show_spinner=False)
+    @st.cache_resource(ttl=3600)
     def get_companies(_self) -> List[Dict]:
         url = f"{_self.base_url}/companies"
         results = []
@@ -41,7 +41,7 @@ class FreshdeskAPI:
             results.extend(page_data)
         return results
 
-    @st.cache_resource(ttl=3600, show_spinner=False)
+    @st.cache_resource(ttl=3600)
     def get_company_by_id(_self, company_id: int) -> Optional[Dict]:
         url = f"{_self.base_url}/companies/{company_id}"
         resp = _self._get(url)
@@ -51,7 +51,7 @@ class FreshdeskAPI:
         companies_data = self.get_companies()
         return {c['name']: c['id'] for c in companies_data}
 
-    @st.cache_resource(ttl=3600, show_spinner=False)
+    @st.cache_resource(ttl=3600)
     def get_products(_self) -> List[Dict]:
         url = f"{_self.base_url}/products"
         results = []
@@ -63,7 +63,7 @@ class FreshdeskAPI:
         products = self.get_products()
         return {p['id']: p['name'] for p in products}
 
-    @st.cache_resource(ttl=3600, show_spinner=False)
+    @st.cache_resource(ttl=3600)
     def get_time_entries(_self, start_date: str, end_date: str, company_id: Optional[int]=None) -> List[Dict]:
         # start_date and end_date are expected as YYYY-MM-DD strings
         url = f"{_self.base_url}/time_entries?executed_before={end_date}&executed_after={start_date}"
@@ -75,7 +75,7 @@ class FreshdeskAPI:
             results.extend(page_data)
         return results
 
-    @st.cache_resource(ttl=3600, show_spinner=False)
+    @st.cache_resource(ttl=3600)
     def get_tickets(_self, updated_since: Optional[str]=None, per_page=100, order_by='updated_at', order_type='desc', include='stats,requester,description') -> List[Dict]:
         """Get tickets updated since a certain date."""
         if updated_since is None:
@@ -90,25 +90,25 @@ class FreshdeskAPI:
             results.extend(page_data)
         return results
 
-    @st.cache_resource(ttl=3600, show_spinner=False)
+    @st.cache_resource(ttl=3600)
     def get_ticket_data(_self, ticket_id: int) -> Dict:
         url = f"{_self.base_url}/tickets/{ticket_id}"
         resp = _self._get(url)
         return resp.json()
 
-    @st.cache_resource(ttl=3600*24*7, show_spinner=False)
+    @st.cache_resource(ttl=3600*24*7)
     def get_agent(_self, agent_id: int) -> Dict:
         url = f"{_self.base_url}/agents/{agent_id}"
         resp = _self._get(url)
         return resp.json()
 
-    @st.cache_resource(ttl=3600*24*7, show_spinner=False)
+    @st.cache_resource(ttl=3600*24*7)
     def get_group(_self, group_id: int) -> Dict:
         url = f"{_self.base_url}/groups/{group_id}"
         resp = _self._get(url)
         return resp.json()
 
-    @st.cache_resource(ttl=3600*24*7, show_spinner=False)
+    @st.cache_resource(ttl=3600*24*7)
     def get_requester(_self, requester_id: int) -> Dict:
         url = f"{_self.base_url}/contacts/{requester_id}"
         resp = _self._get(url)

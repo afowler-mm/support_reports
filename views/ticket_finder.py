@@ -17,7 +17,7 @@ def display_ticket_finder(client_code: str, filters_container):
         st.warning("No tickets found in the selected range")
         return
 
-    with st.spinner("Filtering tickets..."):
+    with st.spinner("Fetching additional details about tickets..."):
         with filters_container:
             st.subheader("Filters")
             if client_code == "admin":
@@ -82,9 +82,6 @@ def display_ticket_finder(client_code: str, filters_container):
 
             with filters_container:
 
-                # Add "Change Requests Only" filter
-                change_request_only = st.checkbox("Show change requests only", value=False)
-
                 # Add text input filter
                 search_term = (
                     st.text_input("Search tickets (titles and descriptions)", "")
@@ -110,6 +107,8 @@ def display_ticket_finder(client_code: str, filters_container):
                 selected_statuses = st.pills(
                     "Filter by status", status_options_readable, selection_mode="multi"
                 )
+                
+                change_request_only = st.checkbox("Show change requests only", value=False)
 
                 st.divider()
 

@@ -4,13 +4,13 @@ from views.monthly import display_monthly_report
 from views.xero import display_xero_exporter
 from views.ticket_finder import display_ticket_finder
 from views.supportbot import display_supportbot
-from auth import login, logout, get_current_user
-
-# Initialize CookieController in the main script
-cookies = CookieController()
+from auth import login, logout, get_current_use
 
 # Configure Streamlit
 st.set_page_config(page_title="Made Media Support Reporter", page_icon="🧮", layout="wide")
+
+# Initialize CookieController in the main script
+cookies = CookieController()
 
 # Initialize session state
 if "logged_in" not in st.session_state:

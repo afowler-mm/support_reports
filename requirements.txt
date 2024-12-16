@@ -1,3 +1,6 @@
 gspread
 streamlit_authenticator
 streamlit_cookies_controller
+slack_sdk
+anthropic
+python-dotenv

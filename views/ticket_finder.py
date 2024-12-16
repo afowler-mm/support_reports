@@ -84,7 +84,7 @@ def display_ticket_finder(client_code: str, filters_container):
 
                 # Add text input filter
                 search_term = (
-                    st.text_input("Search tickets (titles and descriptions)", "")
+                    st.text_input("Search tickets", "")
                     .strip()
                     .lower()
                 )

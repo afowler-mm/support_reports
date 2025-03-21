@@ -172,58 +172,25 @@ def display_time_summary(tickets_details_df, company_data, start_date):
     
     st.subheader(f"Support hours usage for {formatted_date}")
     
-    # Use columns for the main metrics
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Total time tracked", total_time_formatted)
-    with col2:
-        st.metric("Billable time", billable_time_formatted)
-    with col3:
-        if is_current_or_adjacent_month:
-            st.metric("Estimated cost", estimated_cost)
-        else:
-            st.metric("Billable time", billable_time_formatted)
+    # Generate a dictionary for metrics
+    time_summary_contents = {
+        "Total hours tracked": total_time_formatted,
+        "Billable hours": billable_time_formatted,
+    }
     
-    if is_current_or_adjacent_month and (inclusive_hours > 0 or carryover > 0):
-        with st.expander("Estimated cost breakdown", expanded=True):
-            # st.markdown(f"""
-            # | Calculation | Hours |
-            # |------------|-------|
-            # | Billable time | {billable_time:.1f} h |
-            # {f"| Monthly contract | −{inclusive_hours:.1f} h |" if inclusive_hours > 0 else ""}
-            # {f"| Rollover from {prev_month} | −{carryover:.1f} h |" if carryover > 0 else ""}
-            # | **Billable overage** | **{overage_hours:.1f} h** |
-            # """)
-            
-            # Show the cost calculation only if there's an overage
-            if overage_hours > 0:
-                st.write(f"{billable_time:.1f} billable hours – {inclusive_hours:.1f} contract hours – {carryover:.1f} rollover hours = **{overage_hours:.1f} billable overage hours**")
-                st.write(f"{overage_hours:.1f} hours ×  {currency_symbol}{overage_rate} contract rate/hour = **{currency_symbol}{overage_hours * overage_rate:,.2f}**")
-                
-            else:
-                st.markdown("**No billable overage this month**")
-            
-            # Add the data source info as a caption
-            if st.session_state.client_code == "admin":
-                st.caption(data_source_info)
+    if is_current_or_adjacent_month:
+        time_summary_contents["Rollover hours"] = rollover_time
+        time_summary_contents["Billable overage"] = f"{overage_hours:.1f} h"
+        time_summary_contents["Estimated cost"] = estimated_cost
     
-    # Dictionary for metrics displayed in the original layout
-    # time_summary_contents = {
-    #     "Total hours tracked": total_time_formatted,
-    #     "Billable hours": billable_time_formatted,
-    # }
-    
-    # if inclusive_hours > 0 and is_current_or_adjacent_month:
-    #     time_summary_contents["Contract hours"] = f"{inclusive_hours:.0f} h"
-    # if carryover > 0:
-    #     time_summary_contents["Rollover hours"] = rollover_time
-    # if overage_hours > 0 and is_current_or_adjacent_month:
-    #     time_summary_contents["Billable overage"] = f"{overage_hours:.1f} h"
-    
+    columns = st.columns(len(time_summary_contents))
+    for col, (k, v) in zip(columns, time_summary_contents.items()):
+        col.metric(label=k, value=v)
 
-    # columns = st.columns(len(time_summary_contents))
-    # for col, (k, v) in zip(columns, time_summary_contents.items()):
-    #     col.metric(label=k, value=v)
+    if is_current_or_adjacent_month and (inclusive_hours > 0 or carryover > 0) and overage_hours > 0:
+        with st.expander("Estimated cost breakdown"):
+            st.write(f"{billable_time:.1f} billable hours – {inclusive_hours:.1f} contract hours – {carryover:.1f} rollover hours = **{overage_hours:.1f} billable overage hours**")
+            st.write(f"{overage_hours:.1f} hours ×  {currency_symbol}{overage_rate} contract rate/hour = **{currency_symbol}{overage_hours * overage_rate:,.2f} estimated cost**")
 
     # Warn if any tickets are marked "Invoice"
     invoice_tickets = tickets_details_df[tickets_details_df["billing_status"] == "Invoice"]

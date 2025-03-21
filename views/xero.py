@@ -9,14 +9,14 @@ from logic import calculate_billable_time
 from utils import month_selector, get_support_contract_data
 
 def display_xero_exporter(client_code):
-    st.warning('Not recently tested. Use with caution and let Andrew SF know if something needs changing.')
+    st.warning('Recently updated. Use with caution and let Andrew SF know if something needs adjusting.')
     
     st.info('''
-        This tool generates a CSV for importing into Xero. Known limitations:
-        * Does not account for rollover hours.
-        * Does not include line items for retainer hours.
-        
-        Please handle these manually for now.
+        This tool generates a CSV for importing into Xero. Features:
+        * Groups all time entries by ticket, showing one line per ticket
+        * Automatically includes contract information as a descriptive line item
+        * Adds a negative quantity line item for rollover hours (credit)
+        * Shows both applied rollover hours and total available rollover hours
     ''')
 
     selected_month = month_selector(label="Select a month")
@@ -32,32 +32,85 @@ def display_xero_exporter(client_code):
         # Prepare detailed tickets
         tickets_details = prepare_tickets_details_from_time_entries(time_entries_data, products)
 
-        # Add invoice numbers and filter relevant data
+        # Add invoice numbers
         for ticket in tickets_details:
             if ticket['company_code']:
                 ticket['InvoiceNumber'] = f"S-{ticket['company_code']}{selected_date.strftime('%y%-m')}"
-                
-                # If we have contract data, add a line in the description
-                if 'carryover_hours' in ticket and ticket['carryover_hours'] > 0 or 'inclusive_hours' in ticket and ticket['inclusive_hours']:
-                    carry_note = ""
-                    if ticket['carryover_hours'] > 0:
-                        carry_note += f"{ticket['carryover_hours']} hours carried over. "
-                    if ticket['inclusive_hours']:
-                        carry_note += f"{ticket['inclusive_hours']} hours included in contract."
-                    if carry_note:
-                        # We'll add this note later when building the description
-                        ticket['contract_note'] = carry_note
 
+        # Create the initial DataFrame for tickets
         tickets_details_df = pd.DataFrame(tickets_details)
         tickets_details_df = tickets_details_df[tickets_details_df['company_code'] != "—"]
         tickets_details_df = tickets_details_df[tickets_details_df['hourly_rate'].notnull()]
+        
+        # Group by company to create additional line items for each company
+        company_groups = tickets_details_df.groupby(['company', 'company_code', 'InvoiceNumber', 'hourly_rate', 'currency'])
+        
+        # Create a list to store all rows including the new line items
+        all_rows = []
+        
+        # Process each company group
+        for (company, company_code, invoice_number, hourly_rate, currency), group in company_groups:
+            # Add all original ticket rows to our list
+            all_rows.extend(group.to_dict('records'))
+            
+            # Get total billable hours for this company
+            total_billable_hours = group['billable_time_this_month'].sum()
+            
+            # Get contract data from the first row (should be the same for all rows in this company)
+            first_row = group.iloc[0]
+            carryover_hours = first_row.get('carryover_hours', 0)
+            inclusive_hours = first_row.get('inclusive_hours', 0)
+            
+            # Only add extra line items if we have contract or carryover hours
+            if carryover_hours > 0 or inclusive_hours > 0:
+                # Create contract details line item
+                contract_line = {
+                    'company': company,
+                    'company_code': company_code,
+                    'InvoiceNumber': invoice_number,
+                    'hourly_rate': hourly_rate,
+                    'currency': currency,
+                    'billable_time_this_month': 0,  # No quantity for this informational line
+                    'ticket_id': "",  # No ticket associated
+                    'title': "Support contract details",
+                    'product': "Support",
+                    'change_request': False,
+                    'Description': f"Support contract: {inclusive_hours} hours included monthly"
+                }
+                all_rows.append(contract_line)
+                
+                # If we have carryover hours, add a line item with negative quantity
+                if carryover_hours > 0:
+                    # Only apply carryover up to the billable amount
+                    applied_carryover = min(carryover_hours, total_billable_hours)
+                    if applied_carryover > 0:
+                        carryover_line = {
+                            'company': company,
+                            'company_code': company_code,
+                            'InvoiceNumber': invoice_number,
+                            'hourly_rate': hourly_rate,
+                            'currency': currency,
+                            'billable_time_this_month': -applied_carryover,  # Negative quantity for credit
+                            'ticket_id': "",  # No ticket associated
+                            'title': "Rollover credit",
+                            'product': "Support",
+                            'change_request': False,
+                            'Description': f"Credit for {applied_carryover:.1f} rollover hours (total available: {carryover_hours:.1f}h)"
+                        }
+                        all_rows.append(carryover_line)
+        
+        # Create new DataFrame with all rows
+        tickets_details_df = pd.DataFrame(all_rows)
 
         # Map and transform for Xero CSV
         tickets_details_df['Description'] = tickets_details_df.apply(
             lambda row: (
-                f"{row['ticket_id']} – {row['title']} [{row['product']}]" +
-                (" [Change Request]" if row['change_request'] else "") +
-                (f"\nNote: {row['contract_note']}" if 'contract_note' in row else "")
+                # For ticket rows, show ticket ID and details
+                (f"{row['ticket_id']} – {row['title']} [{row['product']}]" + 
+                 (" [Change Request]" if row['change_request'] else "")) 
+                if row['ticket_id'] else 
+                # For non-ticket rows (contract info and rollover), use the description directly
+                row.get('Description', '')
             ),
             axis=1
         )
@@ -111,7 +164,8 @@ def display_xero_exporter(client_code):
         st.cache_data.clear()
 
 def prepare_tickets_details_from_time_entries(time_entries, products):
-    details = []
+    # Create a dictionary to aggregate time entries by ticket
+    ticket_aggregates = {}
     companies = {c['id']: c for c in freshdesk_api.get_companies()}
     
     # Setup Google Sheets client
@@ -155,24 +209,36 @@ def prepare_tickets_details_from_time_entries(time_entries, products):
         time_hours = float(entry.get('time_spent_in_seconds', 0)) / 3600.0
         billable_hours = calculate_billable_time(entry, ticket_data, time_hours, products)
 
-        details.append({
-            'time_spent_this_month': time_hours,
-            'billable_time_this_month': billable_hours,
-            'ticket_id': ticket_id,
-            'title': ticket_data.get('subject', 'No subject'),
-            'company': ticket_data.get('company_name', 'Unknown'),
-            'company_code': company_code,
-            'hourly_rate': hourly_rate,
-            'currency': currency,  # Include the correct currency
-            'product': product_name,
-            'change_request': ticket_data.get('custom_fields', {}).get('change_request', False),
-            # Add contract data if available
-            'carryover_hours': contract_data_cache.get(company_code, {}).get('carryover_hours', 0) 
-                if company_code != "—" and "error" not in contract_data_cache.get(company_code, {}) else 0,
-            'inclusive_hours': contract_data_cache.get(company_code, {}).get('inclusive_hours') 
-                if company_code != "—" and "error" not in contract_data_cache.get(company_code, {}) 
-                else company.get('custom_fields', {}).get('inclusive_hours')
-        })
+        # Create a key for the ticket
+        ticket_key = str(ticket_id)
+        
+        # If we haven't seen this ticket before, create a new entry
+        if ticket_key not in ticket_aggregates:
+            ticket_aggregates[ticket_key] = {
+                'time_spent_this_month': 0,
+                'billable_time_this_month': 0,
+                'ticket_id': ticket_id,
+                'title': ticket_data.get('subject', 'No subject'),
+                'company': ticket_data.get('company_name', 'Unknown'),
+                'company_code': company_code,
+                'hourly_rate': hourly_rate,
+                'currency': currency,
+                'product': product_name,
+                'change_request': ticket_data.get('custom_fields', {}).get('change_request', False),
+                # Add contract data if available
+                'carryover_hours': contract_data_cache.get(company_code, {}).get('carryover_hours', 0) 
+                    if company_code != "—" and "error" not in contract_data_cache.get(company_code, {}) else 0,
+                'inclusive_hours': contract_data_cache.get(company_code, {}).get('inclusive_hours') 
+                    if company_code != "—" and "error" not in contract_data_cache.get(company_code, {}) 
+                    else company.get('custom_fields', {}).get('inclusive_hours')
+            }
+        
+        # Add the hours to the ticket's total
+        ticket_aggregates[ticket_key]['time_spent_this_month'] += time_hours
+        ticket_aggregates[ticket_key]['billable_time_this_month'] += billable_hours
+    
+    # Convert the aggregated dictionary to a list
+    details = list(ticket_aggregates.values())
     
     # Display a note about spreadsheet data source if we're in admin mode
     if st.session_state.client_code == "admin" and contract_data_cache:

@@ -4,8 +4,9 @@ import pandas as pd
 
 from collections import defaultdict
 
-from utils import month_selector
+from utils import month_selector, get_support_contract_data
 from apis.freshdesk import freshdesk_api
+from apis.google import setup_google_sheets
 from logic import calculate_billable_time
 
 
@@ -108,11 +109,37 @@ def prepare_tickets_details_from_time_entries(time_entries_data, product_options
 
 def display_time_summary(tickets_details_df, company_data, start_date):
     year, month, _ = start_date.split("-")
+    month_datetime = datetime.datetime.strptime(start_date, '%Y-%m-%d')
 
-    total_time = f"{tickets_details_df['time_spent_this_month'].sum():.1f} h"
-    billable_time = f"{tickets_details_df['billable_time_this_month'].sum():.1f} h"
-    carryover_value = 0;
-    rollover_time = "{:.1f} h".format(float(carryover_value)) if carryover_value and str(carryover_value).replace(".", "", 1).isdigit() else None
+    total_time = tickets_details_df['time_spent_this_month'].sum()
+    billable_time = tickets_details_df['billable_time_this_month'].sum()
+    
+    # Get carryover and inclusive hours from Google Spreadsheet
+    google_client = setup_google_sheets(st.secrets["gcp_service_account"])
+    company_code = company_data['custom_fields'].get('company_code')
+    
+    # Get support contract data from the spreadsheet
+    support_data = get_support_contract_data(google_client, company_code, month_datetime)
+    
+    # Use data from the spreadsheet if available, otherwise fall back to company data
+    carryover_value = support_data.get('carryover_hours', 0) if 'error' not in support_data else 0
+    inclusive_hours = support_data.get('inclusive_hours') if 'error' not in support_data else company_data['custom_fields'].get('inclusive_hours')
+    prev_month = support_data.get('prev_month', '')
+    
+    # Prepare data source info for later use in the expander
+    spreadsheet_id = "1OXy-yuN_Qne2Pc7uc18V2eKXiDkWIEp88y68lHG1FDU"
+    spreadsheet_url = f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}"
+    
+    if 'error' not in support_data:
+        data_source_info = f"Using support contract data from the [support contract spreadsheet]({spreadsheet_url})."
+    else:
+        data_source_info = f"Could not get data from the spreadsheet: {support_data.get('error')}. Using fallback data from Freshdesk."
+    
+    # Format hours with one decimal place
+    total_time_formatted = f"{total_time:.1f} h"
+    billable_time_formatted = f"{billable_time:.1f} h"
+    rollover_time = "{:.1f} h".format(float(carryover_value)) if carryover_value and str(carryover_value).replace(".", "", 1).replace("-", "", 1).isdigit() else "0.0 h"
+    carryover = float(carryover_value) if carryover_value else 0
 
     now = datetime.datetime.now()
     start_date_year, start_date_month = map(int, start_date.split("-")[:2])
@@ -130,34 +157,73 @@ def display_time_summary(tickets_details_df, company_data, start_date):
     }
     currency_symbol = currency_map.get(company_data['custom_fields'].get('currency'), company_data['custom_fields'].get('currency', ''))
 
-    total_billable_hours = tickets_details_df['billable_time_this_month'].sum()
-    overage_rate = company_data['custom_fields'].get('contract_hourly_rate', 0)
-    carryover = float(carryover_value) if rollover_time else 0
-    inclusive_hours = company_data['custom_fields'].get('inclusive_hours')
-
-    estimated_cost = f"{currency_symbol}{max(total_billable_hours - carryover - inclusive_hours, 0) * overage_rate:,.2f}" if is_current_or_adjacent_month else f"{currency_symbol}0.00"
-
-    time_summary_contents = {
-        "Total time tracked": total_time,
-        "Of which potentially billable": billable_time,
-    }
-
+    # Use inclusive hours from either spreadsheet or company data
+    if inclusive_hours is None:
+        inclusive_hours = company_data['custom_fields'].get('inclusive_hours', 0)
     
-    if inclusive_hours and is_current_or_adjacent_month:
-        time_summary_contents["Support contract includes"] = f"{inclusive_hours:.0f} h"
-    if rollover_time:
-        time_summary_contents["Rollover time available"] = rollover_time
-    if overage_rate and is_current_or_adjacent_month:
-        time_summary_contents["Hourly rate for overages"] = f"{currency_symbol}{overage_rate:,.0f}"
-    if is_current_or_adjacent_month:
-        time_summary_contents["Estimated cost this month"] = estimated_cost
+    # Calculate billable hours after considering contract and rollover
+    inclusive_hours = float(inclusive_hours) if inclusive_hours else 0
+    overage_hours = max(0, billable_time - inclusive_hours - carryover)
+    overage_rate = company_data['custom_fields'].get('contract_hourly_rate', 0)
+    estimated_cost = f"{currency_symbol}{overage_hours * overage_rate:,.2f}" if is_current_or_adjacent_month else f"{currency_symbol}0.00"
 
+    # Generate a clear billing summary
     formatted_date = datetime.datetime.strptime(start_date, '%Y-%m-%d').strftime('%B %Y')
     
+    st.subheader(f"Support hours usage for {formatted_date}")
+    
+    # Use columns for the main metrics
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Total time tracked", total_time_formatted)
+    with col2:
+        st.metric("Billable time", billable_time_formatted)
+    with col3:
+        if is_current_or_adjacent_month:
+            st.metric("Estimated cost", estimated_cost)
+        else:
+            st.metric("Billable time", billable_time_formatted)
+    
+    if is_current_or_adjacent_month and (inclusive_hours > 0 or carryover > 0):
+        with st.expander("Estimated cost breakdown", expanded=True):
+            # st.markdown(f"""
+            # | Calculation | Hours |
+            # |------------|-------|
+            # | Billable time | {billable_time:.1f} h |
+            # {f"| Monthly contract | −{inclusive_hours:.1f} h |" if inclusive_hours > 0 else ""}
+            # {f"| Rollover from {prev_month} | −{carryover:.1f} h |" if carryover > 0 else ""}
+            # | **Billable overage** | **{overage_hours:.1f} h** |
+            # """)
+            
+            # Show the cost calculation only if there's an overage
+            if overage_hours > 0:
+                st.write(f"{billable_time:.1f} billable hours – {inclusive_hours:.1f} contract hours – {carryover:.1f} rollover hours = **{overage_hours:.1f} billable overage hours**")
+                st.write(f"{overage_hours:.1f} hours ×  {currency_symbol}{overage_rate} contract rate/hour = **{currency_symbol}{overage_hours * overage_rate:,.2f}**")
+                
+            else:
+                st.markdown("**No billable overage this month**")
+            
+            # Add the data source info as a caption
+            if st.session_state.client_code == "admin":
+                st.caption(data_source_info)
+    
+    # Dictionary for metrics displayed in the original layout
+    # time_summary_contents = {
+    #     "Total hours tracked": total_time_formatted,
+    #     "Billable hours": billable_time_formatted,
+    # }
+    
+    # if inclusive_hours > 0 and is_current_or_adjacent_month:
+    #     time_summary_contents["Contract hours"] = f"{inclusive_hours:.0f} h"
+    # if carryover > 0:
+    #     time_summary_contents["Rollover hours"] = rollover_time
+    # if overage_hours > 0 and is_current_or_adjacent_month:
+    #     time_summary_contents["Billable overage"] = f"{overage_hours:.1f} h"
+    
 
-    columns = st.columns(len(time_summary_contents))
-    for col, (k, v) in zip(columns, time_summary_contents.items()):
-        col.metric(label=k, value=v)
+    # columns = st.columns(len(time_summary_contents))
+    # for col, (k, v) in zip(columns, time_summary_contents.items()):
+    #     col.metric(label=k, value=v)
 
     # Warn if any tickets are marked "Invoice"
     invoice_tickets = tickets_details_df[tickets_details_df["billing_status"] == "Invoice"]

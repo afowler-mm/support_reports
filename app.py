@@ -5,6 +5,7 @@ from views.monthly import display_monthly_report
 from views.xero import display_xero_exporter
 from views.ticket_finder import display_ticket_finder
 from views.supportbot import display_supportbot
+from views.sandbox import display_sandbox_view
 from auth import login, hash_client_code, validate_query_param_login
 
 # Configure Streamlit
@@ -62,6 +63,10 @@ if st.session_state.logged_in:
     def supportbot():
         st.title("Support bot")
         display_supportbot()
+        
+    def sandbox():
+        st.title("Spreadsheet explorer")
+        display_sandbox_view(st.session_state.client_code)
 
     # Page navigation configuration
     pages = [
@@ -72,6 +77,7 @@ if st.session_state.logged_in:
     if st.session_state.client_code == "admin":
         pages.append(st.Page(xero_export, title="Xero export", icon="💸"))
         pages.append(st.Page(supportbot, title="Support bot", icon="🤖"))
+        # pages.append(st.Page(sandbox, title="Spreadsheet explorer", icon="📊"))
 
     # Navigation
     selected_page = st.navigation(pages)

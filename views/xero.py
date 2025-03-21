@@ -4,8 +4,9 @@ import base64
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 from apis.freshdesk import freshdesk_api
+from apis.google import setup_google_sheets
 from logic import calculate_billable_time
-from utils import month_selector
+from utils import month_selector, get_support_contract_data
 
 def display_xero_exporter(client_code):
     st.warning('Not recently tested. Use with caution and let Andrew SF know if something needs changing.')
@@ -35,6 +36,17 @@ def display_xero_exporter(client_code):
         for ticket in tickets_details:
             if ticket['company_code']:
                 ticket['InvoiceNumber'] = f"S-{ticket['company_code']}{selected_date.strftime('%y%-m')}"
+                
+                # If we have contract data, add a line in the description
+                if 'carryover_hours' in ticket and ticket['carryover_hours'] > 0 or 'inclusive_hours' in ticket and ticket['inclusive_hours']:
+                    carry_note = ""
+                    if ticket['carryover_hours'] > 0:
+                        carry_note += f"{ticket['carryover_hours']} hours carried over. "
+                    if ticket['inclusive_hours']:
+                        carry_note += f"{ticket['inclusive_hours']} hours included in contract."
+                    if carry_note:
+                        # We'll add this note later when building the description
+                        ticket['contract_note'] = carry_note
 
         tickets_details_df = pd.DataFrame(tickets_details)
         tickets_details_df = tickets_details_df[tickets_details_df['company_code'] != "—"]
@@ -44,7 +56,8 @@ def display_xero_exporter(client_code):
         tickets_details_df['Description'] = tickets_details_df.apply(
             lambda row: (
                 f"{row['ticket_id']} – {row['title']} [{row['product']}]" +
-                (" [Change Request]" if row['change_request'] else "")
+                (" [Change Request]" if row['change_request'] else "") +
+                (f"\nNote: {row['contract_note']}" if 'contract_note' in row else "")
             ),
             axis=1
         )
@@ -100,6 +113,12 @@ def display_xero_exporter(client_code):
 def prepare_tickets_details_from_time_entries(time_entries, products):
     details = []
     companies = {c['id']: c for c in freshdesk_api.get_companies()}
+    
+    # Setup Google Sheets client
+    google_client = setup_google_sheets(st.secrets["gcp_service_account"])
+
+    # Create a dict to store contract data by company code to avoid multiple lookups
+    contract_data_cache = {}
 
     for entry in time_entries:
         ticket_id = entry.get('ticket_id')
@@ -114,6 +133,23 @@ def prepare_tickets_details_from_time_entries(time_entries, products):
         company_code = company.get('custom_fields', {}).get('company_code', "—")
         hourly_rate = company.get('custom_fields', {}).get('contract_hourly_rate') or ticket_data.get('custom_fields', {}).get('contract_hourly_rate')
         currency = company.get('custom_fields', {}).get('currency', 'USD')  # Fetch the currency here
+
+        # Get support contract data from spreadsheet
+        if company_code not in contract_data_cache and company_code != "—":
+            # Use the first day of the month from the time entry for contract data lookup
+            time_spent_at = entry.get('executed_at')
+            if time_spent_at:
+                # Parse the date from the time entry
+                try:
+                    date_obj = datetime.strptime(time_spent_at.split('T')[0], '%Y-%m-%d')
+                    # Get first day of the month
+                    first_day = datetime(date_obj.year, date_obj.month, 1)
+                    contract_data_cache[company_code] = get_support_contract_data(google_client, company_code, first_day)
+                except Exception:
+                    contract_data_cache[company_code] = {"error": "Failed to parse date"}
+            else:
+                # Use current month if no date in time entry
+                contract_data_cache[company_code] = get_support_contract_data(google_client, company_code)
 
         product_name = products.get(ticket_data.get('product_id'), "Unknown")
         time_hours = float(entry.get('time_spent_in_seconds', 0)) / 3600.0
@@ -130,5 +166,20 @@ def prepare_tickets_details_from_time_entries(time_entries, products):
             'currency': currency,  # Include the correct currency
             'product': product_name,
             'change_request': ticket_data.get('custom_fields', {}).get('change_request', False),
+            # Add contract data if available
+            'carryover_hours': contract_data_cache.get(company_code, {}).get('carryover_hours', 0) 
+                if company_code != "—" and "error" not in contract_data_cache.get(company_code, {}) else 0,
+            'inclusive_hours': contract_data_cache.get(company_code, {}).get('inclusive_hours') 
+                if company_code != "—" and "error" not in contract_data_cache.get(company_code, {}) 
+                else company.get('custom_fields', {}).get('inclusive_hours')
         })
+    
+    # Display a note about spreadsheet data source if we're in admin mode
+    if st.session_state.client_code == "admin" and contract_data_cache:
+        success_count = sum(1 for data in contract_data_cache.values() if "error" not in data)
+        if success_count > 0:
+            spreadsheet_id = "1OXy-yuN_Qne2Pc7uc18V2eKXiDkWIEp88y68lHG1FDU"
+            spreadsheet_url = f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}"
+            st.info(f"Got support contract data from the [spreadsheet]({spreadsheet_url}) for {success_count} companies.")
+        
     return details

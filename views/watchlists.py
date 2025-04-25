@@ -52,36 +52,53 @@ def display_watchlists(client_code: str, filters_container=None):
         except Exception as e:
             st.warning(f"Could not fetch products: {str(e)}")
             
+        # Fetch categories for filtering (from custom_fields)
+        categories = []
+        try:
+            # Get categories from sample tickets' custom fields
+            sample_tickets = freshdesk_api.get_tickets()[:100]  # Limit to 100 recent tickets
+            for ticket in sample_tickets:
+                if ticket.get('custom_fields') and ticket['custom_fields'].get('category'):
+                    category = ticket['custom_fields'].get('category')
+                    if category and category not in categories:
+                        categories.append(category)
+        except Exception as e:
+            st.warning(f"Could not fetch categories: {str(e)}")
+            
         # Create multiselect filters
         selected_groups = st.multiselect("Filter by Group", ["All Groups"] + sorted(groups), default=["All Groups"])
         selected_products = st.multiselect("Filter by Product", ["All Products"] + sorted(products), default=["All Products"])
+        selected_categories = st.multiselect("Filter by Category", ["All Categories"] + sorted(categories), default=["All Categories"])
         
-        # Convert "All Groups/Products" selection to None for easier filtering
+        # Convert "All X" selection to None for easier filtering
         filter_groups = None if "All Groups" in selected_groups else selected_groups
         filter_products = None if "All Products" in selected_products else selected_products
+        filter_categories = None if "All Categories" in selected_categories else selected_categories
 
     # Create tabs for different watchlists
     tabs = st.tabs(["Tickets over estimate", "Aging unresolved tickets"])
 
     # Tab 1: Tickets Over Estimate
     with tabs[0]:
-        display_tickets_over_estimate(client_code, filter_groups, filter_products)
+        display_tickets_over_estimate(client_code, filter_groups, filter_products, filter_categories)
 
     # Tab 2: Aging Unresolved Tickets
     with tabs[1]:
-        display_aging_unresolved_tickets(client_code, filter_groups, filter_products)
+        display_aging_unresolved_tickets(client_code, filter_groups, filter_products, filter_categories)
 
-def display_tickets_over_estimate(client_code: str, filter_groups=None, filter_products=None):
+def display_tickets_over_estimate(client_code: str, filter_groups=None, filter_products=None, filter_categories=None):
     """Display tickets where time spent exceeds estimate."""
     st.subheader("Tickets over estimate")
     
     # Show active filters if any
-    if filter_groups or filter_products:
+    if filter_groups or filter_products or filter_categories:
         filters_text = []
         if filter_groups:
             filters_text.append(f"Groups: {', '.join(filter_groups)}")
         if filter_products:
             filters_text.append(f"Products: {', '.join(filter_products)}")
+        if filter_categories:
+            filters_text.append(f"Categories: {', '.join(filter_categories)}")
         st.caption(f"Active filters: {' | '.join(filters_text)}")
 
     # Date selector for filtering
@@ -218,6 +235,11 @@ def display_tickets_over_estimate(client_code: str, filter_groups=None, filter_p
                 product_options = freshdesk_api.get_product_options()
                 product_name = product_options.get(ticket.get('product_id'), "Unknown")
                 
+            # Get category information
+            category = "Unknown"
+            if ticket.get('custom_fields') and ticket['custom_fields'].get('category'):
+                category = ticket['custom_fields'].get('category')
+                
             over_estimate_tickets.append({
                 'id': ticket_id,
                 'subject': ticket.get('subject', 'No subject'),
@@ -226,6 +248,7 @@ def display_tickets_over_estimate(client_code: str, filter_groups=None, filter_p
                 'assigned_to': agent_name,
                 'group': group_name,
                 'product_name': product_name,
+                'category': category,
                 'estimate': estimate,
                 'total_time': total_time,
                 'over_by': total_time - estimate,
@@ -272,6 +295,8 @@ def display_tickets_over_estimate(client_code: str, filter_groups=None, filter_p
         filtered_df = filtered_df[filtered_df['group'].isin(filter_groups)]
     if filter_products:
         filtered_df = filtered_df[filtered_df['product_name'].isin(filter_products)]
+    if filter_categories:
+        filtered_df = filtered_df[filtered_df['category'].isin(filter_categories)]
     
     # Show filter results
     total_count = len(df)
@@ -283,7 +308,7 @@ def display_tickets_over_estimate(client_code: str, filter_groups=None, filter_p
         st.caption(f"Found {total_count} tickets over estimate")
     
     st.dataframe(
-        filtered_df[['ticket_url', 'over_by_percent', 'subject', 'company', 'status', 'assigned_to', 'group', 
+        filtered_df[['ticket_url', 'over_by_percent', 'subject', 'company', 'status', 'category', 'assigned_to', 'group', 
             'product_name', 'estimate', 'total_time', 'over_by', 'updated_at']],
         column_config={
             'ticket_url': st.column_config.LinkColumn("ID", display_text="tickets/(\d+)"),
@@ -291,6 +316,7 @@ def display_tickets_over_estimate(client_code: str, filter_groups=None, filter_p
             'subject': "Subject",
             'company': "Company",
             'status': "Status",
+            'category': "Category",
             'assigned_to': "Assigned To",
             'group': "Group",
             'product_name': "Product",
@@ -303,17 +329,19 @@ def display_tickets_over_estimate(client_code: str, filter_groups=None, filter_p
         height=600
     )
 
-def display_aging_unresolved_tickets(client_code: str, filter_groups=None, filter_products=None):
+def display_aging_unresolved_tickets(client_code: str, filter_groups=None, filter_products=None, filter_categories=None):
     """Display unresolved tickets that have been open for a long time."""
     st.subheader("Aging unresolved tickets")
     
     # Show active filters if any
-    if filter_groups or filter_products:
+    if filter_groups or filter_products or filter_categories:
         filters_text = []
         if filter_groups:
             filters_text.append(f"Groups: {', '.join(filter_groups)}")
         if filter_products:
             filters_text.append(f"Products: {', '.join(filter_products)}")
+        if filter_categories:
+            filters_text.append(f"Categories: {', '.join(filter_categories)}")
         st.caption(f"Active filters: {' | '.join(filters_text)}")
     
     # Get aging threshold in days
@@ -430,6 +458,11 @@ def display_aging_unresolved_tickets(client_code: str, filter_groups=None, filte
             product_options = freshdesk_api.get_product_options()
             product_name = product_options.get(ticket.get('product_id'), "Unknown")
             
+        # Get category information
+        category = "Unknown"
+        if ticket.get('custom_fields') and ticket['custom_fields'].get('category'):
+            category = ticket['custom_fields'].get('category')
+            
         # Calculate days since last update
         updated_date = datetime.datetime.strptime(updated_at.split('T')[0], '%Y-%m-%d').date()
         days_since_update = (datetime.datetime.now().date() - updated_date).days
@@ -442,6 +475,7 @@ def display_aging_unresolved_tickets(client_code: str, filter_groups=None, filte
             'assigned_to': agent_name,
             'group': group_name,
             'product_name': product_name,
+            'category': category,
             'ticket_type': ticket_type,
             'days_since_update': days_since_update,
             'created_at': ticket.get('created_at'),
@@ -486,24 +520,31 @@ def display_aging_unresolved_tickets(client_code: str, filter_groups=None, filte
         filtered_df = filtered_df[filtered_df['group'].isin(filter_groups)]
     if filter_products:
         filtered_df = filtered_df[filtered_df['product_name'].isin(filter_products)]
+    if filter_categories:
+        filtered_df = filtered_df[filtered_df['category'].isin(filter_categories)]
     
     # Show filter results
     total_count = len(df)
     filtered_count = len(filtered_df)
     
+    # Create status note explaining excluded statuses
+    excluded_status_names = [status_mapping.get(status, str(status)) for status in EXCLUDED_STATUSES]
+    excluded_status_note = f"(excludes {', '.join(excluded_status_names)} tickets)"
+    
     if filtered_count < total_count:
-        st.caption(f"Found {filtered_count} of {total_count} aging tickets that haven't been updated in {days_threshold} days (after filtering)")
+        st.caption(f"Found {filtered_count} of {total_count} aging tickets that haven't been updated in {days_threshold} days {excluded_status_note} (after filtering)")
     else:
-        st.caption(f"Found {total_count} aging tickets that haven't been updated in {days_threshold} days")
+        st.caption(f"Found {total_count} aging tickets that haven't been updated in {days_threshold} days {excluded_status_note}")
     
     st.dataframe(
-        filtered_df[['ticket_url', 'days_since_update', 'subject', 'company', 'status', 'assigned_to', 'group', 
+        filtered_df[['ticket_url', 'days_since_update', 'subject', 'company', 'status', 'category', 'assigned_to', 'group', 
             'product_name', 'ticket_type', 'updated_at']],
         column_config={
             'ticket_url': st.column_config.LinkColumn("ID", display_text="tickets/(\d+)"),
             'subject': "Subject",
             'company': "Company",
             'status': "Status",
+            'category': "Category",
             'assigned_to': "Assigned To",
             'group': "Group",
             'product_name': "Product",

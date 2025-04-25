@@ -66,9 +66,9 @@ def display_watchlists(client_code: str, filters_container=None):
             st.warning(f"Could not fetch categories: {str(e)}")
             
         # Create multiselect filters
-        selected_groups = st.multiselect("Filter by Group", ["All Groups"] + sorted(groups), default=["All Groups"])
-        selected_products = st.multiselect("Filter by Product", ["All Products"] + sorted(products), default=["All Products"])
-        selected_categories = st.multiselect("Filter by Category", ["All Categories"] + sorted(categories), default=["All Categories"])
+        selected_groups = st.multiselect("Filter by group", ["All Groups"] + sorted(groups))
+        selected_products = st.multiselect("Filter by product", ["All Products"] + sorted(products))
+        selected_categories = st.multiselect("Filter by category", ["All Categories"] + sorted(categories))
         
         # Convert "All X" selection to None for easier filtering
         filter_groups = None if "All Groups" in selected_groups else selected_groups
@@ -312,18 +312,18 @@ def display_tickets_over_estimate(client_code: str, filter_groups=None, filter_p
             'product_name', 'estimate', 'total_time', 'over_by', 'updated_at']],
         column_config={
             'ticket_url': st.column_config.LinkColumn("ID", display_text="tickets/(\d+)"),
-            'over_by_percent': st.column_config.ProgressColumn("Over By (%)", format="%.1f%%", min_value=0, max_value=100),
+            'over_by_percent': st.column_config.ProgressColumn("Over by (%)", format="%.1f%%", min_value=0, max_value=100),
             'subject': "Subject",
             'company': "Company",
             'status': "Status",
             'category': "Category",
-            'assigned_to': "Assigned To",
+            'assigned_to': "Assigned to",
             'group': "Group",
             'product_name': "Product",
             'estimate': st.column_config.NumberColumn("Estimate (h)", format="%.1f"),
-            'total_time': st.column_config.NumberColumn("Total Time (h)", format="%.1f"),
-            'over_by': st.column_config.NumberColumn("Over By (h)", format="%.1f"),
-            'updated_at': st.column_config.DatetimeColumn("Last Updated", format="ddd DD MMM YYYY, HH:mm z")
+            'total_time': st.column_config.NumberColumn("Total time (h)", format="%.1f"),
+            'over_by': st.column_config.NumberColumn("Over by (h)", format="%.1f"),
+            'updated_at': st.column_config.DatetimeColumn("Last updated", format="ddd DD MMM YYYY, HH:mm z")
         },
         hide_index=True,
         height=600
@@ -545,12 +545,12 @@ def display_aging_unresolved_tickets(client_code: str, filter_groups=None, filte
             'company': "Company",
             'status': "Status",
             'category': "Category",
-            'assigned_to': "Assigned To",
+            'assigned_to': "Assigned to",
             'group': "Group",
             'product_name': "Product",
             'ticket_type': "Type",
-            'days_since_update': st.column_config.ProgressColumn("Days Since Update", format="%d", min_value=0, max_value=days_threshold * 2),
-            'updated_at': st.column_config.DatetimeColumn("Last Updated", format="ddd DD MMM YYYY, HH:mm z")
+            'days_since_update': st.column_config.ProgressColumn("Days since update", format="%d", min_value=0, max_value=days_threshold * 2),
+            'updated_at': st.column_config.DatetimeColumn("Last updated", format="ddd DD MMM YYYY, HH:mm z")
         },
         hide_index=True,
         height=600

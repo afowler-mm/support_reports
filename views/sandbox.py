@@ -72,7 +72,7 @@ def display_sandbox_view(client_code: str):
         # Display client names found
         st.subheader("Clients Found in Spreadsheet")
         if client_rows:
-            clients_df = pd.DataFrame([row[1][0] for row in client_rows], columns=["Client Name"])
+            clients_df = pd.DataFrame([row[1][0] for row in client_rows], columns=["Client name"])
             st.dataframe(clients_df)
             
             # Try to extract month headers (assuming they're in row 2 or 3)

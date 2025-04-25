@@ -80,6 +80,13 @@ def display_monthly_report(client_code: str):
         st.write("No detailed tickets found.")
         return
 
+    # Process the tickets_details list to ensure all field values are hashable
+    for ticket in tickets_details:
+        for field in list(ticket.keys()):
+            if isinstance(ticket[field], list):
+                ticket[field] = tuple(ticket[field])
+                
+    # Now create the DataFrame from the sanitized data
     tickets_details_df = pd.DataFrame(tickets_details)
 
     # Display the time summary
@@ -100,6 +107,7 @@ def prepare_tickets_details_from_time_entries(time_entries_data, product_options
     progress_status.info(f"Analyzing {len(time_entries_data)} time entries{month_text}...")
     progress_bar.progress(0.0)
     
+    # Make sure all default values are hashable
     details = defaultdict(lambda: {
         'time_spent_this_month': 0.0,
         'billable_time_this_month': 0.0,
@@ -113,7 +121,9 @@ def prepare_tickets_details_from_time_entries(time_entries_data, product_options
         'estimate': 0.0,
         'ticket_type': "Unknown",
         'group_name': "Unknown",
-        'agent_name': "Unknown"
+        'agent_name': "Unknown",
+        # Make sure change_request is present and hashable
+        'change_request': False
     })
 
     # Process each time entry with progress updates
@@ -164,15 +174,29 @@ def prepare_tickets_details_from_time_entries(time_entries_data, product_options
         ticket_detail['title'] = ticket_data.get('subject', 'No subject')
         ticket_detail['requester_name'] = requester_name
         ticket_detail['product_name'] = product_name
-        ticket_detail['billing_status'] = ticket_data['custom_fields'].get('billing_status', 'Unknown')
+        
+        # Get billing status and ensure it's hashable
+        billing_status = ticket_data['custom_fields'].get('billing_status', 'Unknown')
+        if isinstance(billing_status, list):
+            billing_status = tuple(billing_status)
+        ticket_detail['billing_status'] = billing_status
+        
         ticket_detail['change_request'] = ticket_data['custom_fields'].get('change_request', False)
+        
+        # Handle estimate
         estimate_value = ticket_data['custom_fields'].get('estimate_hrs')
         if estimate_value and isinstance(estimate_value, str) and estimate_value.replace('.', '', 1).isdigit():
             # If it's a string representing a number, convert to float
             ticket_detail['estimate'] = float(estimate_value)
         else:
             ticket_detail['estimate'] = 0.0
-        ticket_detail['ticket_type'] = ticket_data['custom_fields'].get('cf_type', 'Unknown')
+            
+        # Get ticket type and ensure it's hashable
+        ticket_type = ticket_data['custom_fields'].get('cf_type', 'Unknown')
+        if isinstance(ticket_type, list):
+            ticket_type = tuple(ticket_type)
+        ticket_detail['ticket_type'] = ticket_type
+        
         ticket_detail['group_name'] = group_name
         ticket_detail['agent_name'] = agent_name
         
@@ -310,7 +334,14 @@ def display_time_summary(tickets_details_df, company_data, start_date):
             st.write(f"{overage_hours:.1f} hours ×  {currency_symbol}{overage_rate} contract rate/hour = **{currency_symbol}{overage_hours * overage_rate:,.2f} estimated cost**")
 
     # Warn if any tickets are marked "Invoice"
-    invoice_tickets = tickets_details_df[tickets_details_df["billing_status"] == "Invoice"]
+    # Handle both string "Invoice" and tuple with "Invoice" in it
+    invoice_tickets = tickets_details_df[
+        tickets_details_df["billing_status"].apply(
+            lambda x: x == "Invoice" or 
+                      (isinstance(x, tuple) and "Invoice" in x)
+        )
+    ]
+    
     if not invoice_tickets.empty:
         num_invoice_tickets = len(invoice_tickets)
         invoice_ticket_ids = invoice_tickets["ticket_id"].tolist()
@@ -329,7 +360,18 @@ def _display_tickets_table(tickets_details_df):
         lambda tid: f"https://mademedia.freshdesk.com/support/tickets/{tid}"
     )
 
-    display_df = tickets_details_df[[
+    # Make a copy of the data to avoid SettingWithCopyWarning
+    display_df = tickets_details_df.copy()
+    
+    # Convert any tuple values to strings for better display
+    for col in ["ticket_type", "billing_status"]:
+        if col in display_df.columns:
+            display_df[col] = display_df[col].apply(
+                lambda x: ", ".join(str(i) for i in x) if isinstance(x, tuple) else x
+            )
+
+    # Select only the columns we want to display
+    display_df = display_df[[
         "ticket_url", 
         "title",
         "time_spent_this_month", 

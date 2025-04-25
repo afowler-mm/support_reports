@@ -61,6 +61,14 @@ def display_tickets_over_estimate(client_code: str):
                     company_id = c['id']
                     break
 
+    # Show progress information while fetching data
+    import time
+    start_time = time.time()
+    
+    # Create placeholders for progress reporting
+    fetch_status = st.empty()
+    fetch_status.info(f"Fetching tickets updated since {lookback_date}...")
+    
     # Get tickets updated since specified date
     updated_since = lookback_date.strftime("%Y-%m-%d")
     tickets = freshdesk_api.get_tickets(updated_since=updated_since)
@@ -69,6 +77,17 @@ def display_tickets_over_estimate(client_code: str):
     if company_id:
         tickets = [t for t in tickets if t.get('company_id') == company_id]
     
+    # Calculate elapsed time
+    elapsed_time = time.time() - start_time
+    using_cached_data = elapsed_time < 0.5  # Less than 500ms probably means cached data
+    
+    # Only show success toast for fresh data
+    if not using_cached_data:
+        st.toast(f"✓ Found {len(tickets)} tickets to analyze", icon="✅")
+    
+    # Clean up status message
+    fetch_status.empty()
+    
     if not tickets:
         st.info("No tickets found within the selected parameters.")
         return
@@ -76,7 +95,25 @@ def display_tickets_over_estimate(client_code: str):
     # Calculate time spent for each ticket
     over_estimate_tickets = []
     
-    for ticket in tickets:
+    # Create progress indicators for ticket analysis
+    progress_status = st.empty()
+    progress_bar = st.empty()
+    
+    # Start time for this operation
+    analysis_start_time = time.time()
+    
+    # Show initial status
+    progress_status.info(f"Analyzing {len(tickets)} tickets for time entries...")
+    
+    # Process each ticket with progress updates
+    for i, ticket in enumerate(tickets):
+        # Update progress
+        progress_percent = i / len(tickets)
+        progress_bar.progress(progress_percent)
+        
+        # Update status periodically
+        if i % max(1, len(tickets) // 10) == 0:
+            progress_status.info(f"Analyzing tickets... ({i}/{len(tickets)} - {int(progress_percent*100)}%)")
         ticket_id = ticket['id']
         
         # Extract estimate from custom fields
@@ -132,6 +169,21 @@ def display_tickets_over_estimate(client_code: str):
                 'created_at': ticket.get('created_at'),
                 'updated_at': ticket.get('updated_at')
             })
+    
+    # Complete the progress and clean up
+    progress_bar.progress(1.0)
+    
+    # Calculate elapsed time for analysis
+    analysis_elapsed_time = time.time() - analysis_start_time
+    analysis_using_cached = analysis_elapsed_time < 0.5  # Less than 500ms means cached
+    
+    # Only show success toast for fresh data
+    if not analysis_using_cached:
+        st.toast(f"✓ Analyzed {len(tickets)} tickets for time entries", icon="✅")
+    
+    # Clear progress indicators
+    progress_status.empty()
+    progress_bar.empty()
     
     if not over_estimate_tickets:
         st.info("No tickets over estimate found.")
@@ -204,6 +256,14 @@ def display_aging_unresolved_tickets(client_code: str):
                 company_id = c['id']
                 break
     
+    # Show progress information while fetching data
+    import time
+    start_time = time.time()
+    
+    # Create placeholders for progress reporting
+    fetch_status = st.empty()
+    fetch_status.info(f"Fetching all tickets...")
+    
     # Get all tickets
     tickets = freshdesk_api.get_tickets()
     
@@ -211,11 +271,42 @@ def display_aging_unresolved_tickets(client_code: str):
     if company_id:
         tickets = [t for t in tickets if t.get('company_id') == company_id]
     
+    # Calculate elapsed time
+    elapsed_time = time.time() - start_time
+    using_cached_data = elapsed_time < 0.5  # Less than 500ms probably means cached data
+    
+    # Only show success toast for fresh data
+    if not using_cached_data:
+        st.toast(f"✓ Found {len(tickets)} tickets to analyze", icon="✅")
+    
+    # Clean up status message
+    fetch_status.empty()
+    
+    # Create progress indicators for ticket analysis
+    progress_status = st.empty()
+    progress_bar = st.empty()
+    
+    # Start time for analysis
+    analysis_start_time = time.time()
+    
+    # Show initial status
+    progress_status.info(f"Analyzing {len(tickets)} tickets for aging issues...")
+    progress_bar.progress(0.0)
+    
     # Filter out resolved/closed/deferred and waiting on customer tickets
     EXCLUDED_STATUSES = [3, 4, 5, 6, 12]  # Resolved, Closed, Deferred, Waiting on Customer, Deferred
     aging_tickets = []
     
-    for ticket in tickets:
+    # Process each ticket with progress updates
+    for i, ticket in enumerate(tickets):
+        # Update progress
+        progress_percent = i / len(tickets)
+        progress_bar.progress(progress_percent)
+        
+        # Update status periodically
+        if i % max(1, len(tickets) // 10) == 0:
+            progress_status.info(f"Analyzing tickets... ({i}/{len(tickets)} - {int(progress_percent*100)}%)")
+            
         # Skip if ticket has a status we want to exclude
         if ticket.get('status') in EXCLUDED_STATUSES:
             continue
@@ -262,6 +353,21 @@ def display_aging_unresolved_tickets(client_code: str):
             'created_at': ticket.get('created_at'),
             'updated_at': updated_at
         })
+    
+    # Complete the progress and clean up
+    progress_bar.progress(1.0)
+    
+    # Calculate elapsed time for analysis
+    analysis_elapsed_time = time.time() - analysis_start_time
+    analysis_using_cached = analysis_elapsed_time < 0.5  # Less than 500ms means cached
+    
+    # Only show success toast for fresh data
+    if not analysis_using_cached:
+        st.toast(f"✓ Analyzed {len(tickets)} tickets for aging issues", icon="✅")
+    
+    # Clear progress indicators
+    progress_status.empty()
+    progress_bar.empty()
     
     if not aging_tickets:
         st.info(f"No unresolved tickets found that haven't been updated in the last {days_threshold} days.")

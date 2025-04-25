@@ -41,18 +41,40 @@ def display_monthly_report(client_code: str):
         st.error("Company not found for this client code.")
         return
 
+    # Show progress information while fetching data
+    import time
+    start_time = time.time()
+    
+    # Create placeholders for progress reporting
+    fetch_status = st.empty()
+    fetch_status.info(f"Fetching product options and time entries...")
+    
+    # Fetch product options
     product_options = freshdesk_api.get_product_options()
 
     # Fetch time entries for the given month and company
+    fetch_status.info(f"Fetching time entries for {selected_month}...")
     time_entries_data = freshdesk_api.get_time_entries(start_date, end_date, company_id)
 
+    # Calculate elapsed time
+    elapsed_time = time.time() - start_time
+    using_cached_data = elapsed_time < 0.5  # Less than 500ms probably means cached data
+    
+    # Only show success toast for fresh data
+    if not using_cached_data and time_entries_data:
+        st.toast(f"✓ Found {len(time_entries_data)} time entries to analyze", icon="✅")
+    
+    # Clean up status message
+    fetch_status.empty()
+    
     if not time_entries_data:
         st.write("No time tracked for this month")
         return
 
     time_entries_df = pd.DataFrame(time_entries_data)
-    product_options = freshdesk_api.get_product_options()
-    tickets_details = prepare_tickets_details_from_time_entries(time_entries_data, product_options)
+    
+    # Process the time entries with progress reporting
+    tickets_details = prepare_tickets_details_from_time_entries(time_entries_data, product_options, selected_month)
 
     if not tickets_details:
         st.write("No detailed tickets found.")
@@ -64,7 +86,20 @@ def display_monthly_report(client_code: str):
     display_time_summary(tickets_details_df, company_data, start_date)
 
 
-def prepare_tickets_details_from_time_entries(time_entries_data, product_options):
+def prepare_tickets_details_from_time_entries(time_entries_data, product_options, selected_month=None):
+    # Track execution time
+    import time
+    analysis_start_time = time.time()
+    
+    # Create progress indicators
+    progress_status = st.empty()
+    progress_bar = st.empty()
+    
+    # Show initial status
+    month_text = f" for {selected_month}" if selected_month else ""
+    progress_status.info(f"Analyzing {len(time_entries_data)} time entries{month_text}...")
+    progress_bar.progress(0.0)
+    
     details = defaultdict(lambda: {
         'time_spent_this_month': 0.0,
         'billable_time_this_month': 0.0,
@@ -81,7 +116,17 @@ def prepare_tickets_details_from_time_entries(time_entries_data, product_options
         'agent_name': "Unknown"
     })
 
-    for entry in time_entries_data:
+    # Process each time entry with progress updates
+    for i, entry in enumerate(time_entries_data):
+        # Update progress bar
+        progress_percent = i / len(time_entries_data)
+        progress_bar.progress(progress_percent)
+        
+        # Update status message periodically
+        if i % max(1, len(time_entries_data) // 10) == 0:
+            progress_status.empty()  # Clear previous message
+            progress_status.info(f"Processing time entries... ({i}/{len(time_entries_data)} - {int(progress_percent*100)}%)")
+            
         ticket_id = entry.get('ticket_id')
         if not ticket_id:
             continue
@@ -144,6 +189,22 @@ def prepare_tickets_details_from_time_entries(time_entries_data, product_options
             ticket_detail['total_time_spent'] = ticket_detail['time_spent_this_month']
             ticket_detail['total_billable_time'] = ticket_detail['billable_time_this_month']
 
+    # Complete the progress and clean up
+    progress_bar.progress(1.0)
+    
+    # Calculate elapsed time for analysis
+    analysis_elapsed_time = time.time() - analysis_start_time
+    analysis_using_cached = analysis_elapsed_time < 0.5  # Less than 500ms means cached
+    
+    # Only show success toast for fresh data
+    if not analysis_using_cached:
+        ticket_count = len(details.values())
+        st.toast(f"✓ Analysis complete - processed {ticket_count} tickets", icon="✅")
+    
+    # Clear progress indicators
+    progress_status.empty()
+    progress_bar.empty()
+    
     return list(details.values())
 
 def display_time_summary(tickets_details_df, company_data, start_date):
@@ -153,12 +214,29 @@ def display_time_summary(tickets_details_df, company_data, start_date):
     total_time = tickets_details_df['time_spent_this_month'].sum()
     billable_time = tickets_details_df['billable_time_this_month'].sum()
     
+    # Show progress for fetching contract data
+    import time
+    contract_start_time = time.time()
+    contract_status = st.empty()
+    contract_status.info("Fetching support contract data...")
+    
     # Get carryover and inclusive hours from Google Spreadsheet
     google_client = setup_google_sheets(st.secrets["gcp_service_account"])
     company_code = company_data['custom_fields'].get('company_code')
     
     # Get support contract data from the spreadsheet
     support_data = get_support_contract_data(google_client, company_code, month_datetime)
+    
+    # Calculate elapsed time
+    contract_elapsed_time = time.time() - contract_start_time
+    contract_using_cached = contract_elapsed_time < 0.5  # Less than 500ms means cached
+    
+    # Only show success toast for fresh data
+    if not contract_using_cached and 'error' not in support_data:
+        st.toast(f"✓ Loaded contract data for {month_datetime.strftime('%B %Y')}", icon="✅")
+    
+    # Clean up status message
+    contract_status.empty()
     
     # Use data from the spreadsheet if available, otherwise fall back to company data
     carryover_value = support_data.get('carryover_hours', 0) if 'error' not in support_data else 0

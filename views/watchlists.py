@@ -71,9 +71,10 @@ def display_watchlists(client_code: str, filters_container=None):
         selected_categories = st.multiselect("Filter by category", ["All Categories"] + sorted(categories))
         
         # Convert "All X" selection to None for easier filtering
-        filter_groups = None if "All Groups" in selected_groups else selected_groups
-        filter_products = None if "All Products" in selected_products else selected_products
-        filter_categories = None if "All Categories" in selected_categories else selected_categories
+        # Convert lists to tuples to make them hashable for caching
+        filter_groups = None if "All Groups" in selected_groups else tuple(selected_groups)
+        filter_products = None if "All Products" in selected_products else tuple(selected_products)
+        filter_categories = None if "All Categories" in selected_categories else tuple(selected_categories)
 
     # Create tabs for different watchlists
     tabs = st.tabs(["Tickets over estimate", "Aging unresolved tickets"])
@@ -292,11 +293,14 @@ def display_tickets_over_estimate(client_code: str, filter_groups=None, filter_p
     # Apply sidebar filters if provided
     filtered_df = df.copy()
     if filter_groups:
-        filtered_df = filtered_df[filtered_df['group'].isin(filter_groups)]
+        # Convert tuple back to list for isin
+        filtered_df = filtered_df[filtered_df['group'].isin(list(filter_groups))]
     if filter_products:
-        filtered_df = filtered_df[filtered_df['product_name'].isin(filter_products)]
+        # Convert tuple back to list for isin
+        filtered_df = filtered_df[filtered_df['product_name'].isin(list(filter_products))]
     if filter_categories:
-        filtered_df = filtered_df[filtered_df['category'].isin(filter_categories)]
+        # Convert tuple back to list for isin
+        filtered_df = filtered_df[filtered_df['category'].isin(list(filter_categories))]
     
     # Show filter results
     total_count = len(df)
@@ -517,11 +521,14 @@ def display_aging_unresolved_tickets(client_code: str, filter_groups=None, filte
     # Apply sidebar filters if provided
     filtered_df = df.copy()
     if filter_groups:
-        filtered_df = filtered_df[filtered_df['group'].isin(filter_groups)]
+        # Convert tuple back to list for isin
+        filtered_df = filtered_df[filtered_df['group'].isin(list(filter_groups))]
     if filter_products:
-        filtered_df = filtered_df[filtered_df['product_name'].isin(filter_products)]
+        # Convert tuple back to list for isin
+        filtered_df = filtered_df[filtered_df['product_name'].isin(list(filter_products))]
     if filter_categories:
-        filtered_df = filtered_df[filtered_df['category'].isin(filter_categories)]
+        # Convert tuple back to list for isin
+        filtered_df = filtered_df[filtered_df['category'].isin(list(filter_categories))]
     
     # Show filter results
     total_count = len(df)

@@ -383,7 +383,12 @@ def display_ticket_finder(client_code: str, filters_container):
                 
                 # Apply category filter
                 if categories:
-                    filtered_df = filtered_df[filtered_df["Category"].isin(categories)]
+                    # Convert to tuple/list to ensure hashability
+                    if not isinstance(categories, (list, tuple)):
+                        cat_list = [categories]
+                    else:
+                        cat_list = list(categories)
+                    filtered_df = filtered_df[filtered_df["Category"].isin(cat_list)]
                 
                 # Apply CR filter
                 if cr_only:
@@ -525,18 +530,26 @@ def display_ticket_finder(client_code: str, filters_container):
                 """Cache-friendly function to filter tickets based on criteria"""
                 filtered_df = df.copy()
                 
-                # Apply filters
+                # Apply filters - ensure all input lists are hashable (tuples)
                 if statuses:
-                    filtered_df = filtered_df[filtered_df["status_readable"].isin(statuses)]
+                    # Convert to list to ensure hashability
+                    status_list = list(statuses) if isinstance(statuses, (list, tuple)) else [statuses]
+                    filtered_df = filtered_df[filtered_df["status_readable"].isin(status_list)]
                     
                 if types:
-                    filtered_df = filtered_df[filtered_df["Ticket Type"].isin(types)]
+                    # Convert to list to ensure hashability
+                    types_list = list(types) if isinstance(types, (list, tuple)) else [types]
+                    filtered_df = filtered_df[filtered_df["Ticket Type"].isin(types_list)]
                     
                 if agents:
-                    filtered_df = filtered_df[filtered_df["Assigned To"].isin(agents)]
+                    # Convert to list to ensure hashability
+                    agents_list = list(agents) if isinstance(agents, (list, tuple)) else [agents]
+                    filtered_df = filtered_df[filtered_df["Assigned To"].isin(agents_list)]
                     
                 if groups:
-                    filtered_df = filtered_df[filtered_df["Group"].isin(groups)]
+                    # Convert to list to ensure hashability
+                    groups_list = list(groups) if isinstance(groups, (list, tuple)) else [groups]
+                    filtered_df = filtered_df[filtered_df["Group"].isin(groups_list)]
                     
                 if has_est and estimate_range:
                     min_est, max_est = estimate_range
@@ -685,9 +698,21 @@ def get_tickets_within_date_range(start_date: str, end_date: str):
         # Fetch tickets updated within the date range
         # The API already filters by updated_since, so we only need to filter by end_date locally
         tickets = freshdesk_api.get_tickets(updated_since=start_date)
-        filtered_tickets = [
-            ticket for ticket in tickets if start_date <= ticket["updated_at"] <= end_date
-        ]
+        
+        # Make sure we're not storing any mutable objects like lists in fields that will be cached
+        # Filter tickets without modifying the originals - creates immutable records
+        filtered_tickets = []
+        for ticket in tickets:
+            if start_date <= ticket["updated_at"] <= end_date:
+                # Deep copy the ticket to prevent shared references to mutable objects
+                filtered_tickets.append(ticket.copy())
+                
+                # If the ticket has custom fields with lists, convert them to tuples
+                for field in filtered_tickets[-1].get('custom_fields', {}).keys():
+                    value = filtered_tickets[-1]['custom_fields'].get(field)
+                    if isinstance(value, list):
+                        filtered_tickets[-1]['custom_fields'][field] = tuple(value)
+                
         return filtered_tickets
     except Exception as e:
         # Return empty list on error - we'll handle the error display outside the cached function

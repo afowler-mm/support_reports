@@ -164,8 +164,18 @@ def display_ticket_finder(client_code: str, filters_container):
                 lambda x: x.get("category", "Unknown")
             )
             
+            # Convert any list values to tuples to make them hashable
+            tickets_df["Category"] = tickets_df["Category"].apply(
+                lambda x: tuple(x) if isinstance(x, list) else x
+            )
+            
             tickets_df["Ticket Type"] = tickets_df["custom_fields"].apply(
                 lambda x: x.get("cf_type", "Unknown")
+            )
+            
+            # Convert any list values to tuples to make them hashable
+            tickets_df["Ticket Type"] = tickets_df["Ticket Type"].apply(
+                lambda x: tuple(x) if isinstance(x, list) else x
             )
             
             # Extract estimate from custom fields
@@ -317,7 +327,17 @@ def display_ticket_finder(client_code: str, filters_container):
                 # Add "Category" filter
                 # Extract categories and handle None values
                 tickets_df["Category"] = tickets_df["Category"].fillna("Unknown")
-                category_options = sorted(tickets_df["Category"].unique().tolist())
+                
+                # Safely get category options, converting tuples back to strings if needed
+                category_options = []
+                for cat in tickets_df["Category"].unique():
+                    if isinstance(cat, tuple):
+                        # Join tuple elements with comma if it's a tuple
+                        category_options.append(", ".join(str(x) for x in cat))
+                    else:
+                        category_options.append(cat)
+                
+                category_options = sorted(category_options)
                 selected_categories = st.multiselect("Filter by category", category_options)
 
                 # Add status filter
@@ -333,7 +353,17 @@ def display_ticket_finder(client_code: str, filters_container):
                 # Add ticket type filter
                 # Fill None values with "Unknown" to avoid sorting errors
                 tickets_df["Ticket Type"] = tickets_df["Ticket Type"].fillna("Unknown")
-                ticket_type_options = sorted(tickets_df["Ticket Type"].unique().tolist())
+                
+                # Safely get ticket type options, converting tuples back to strings if needed
+                ticket_type_options = []
+                for tt in tickets_df["Ticket Type"].unique():
+                    if isinstance(tt, tuple):
+                        # Join tuple elements with comma if it's a tuple
+                        ticket_type_options.append(", ".join(str(x) for x in tt))
+                    else:
+                        ticket_type_options.append(tt)
+                        
+                ticket_type_options = sorted(ticket_type_options)
                 selected_ticket_types = st.multiselect("Filter by ticket type", ticket_type_options)
                 
                 # Add agent filter
@@ -388,7 +418,15 @@ def display_ticket_finder(client_code: str, filters_container):
                         cat_list = [categories]
                     else:
                         cat_list = list(categories)
-                    filtered_df = filtered_df[filtered_df["Category"].isin(cat_list)]
+                    
+                    # Handle case when categories are tuples in DataFrame but strings in filter
+                    matched_rows = filtered_df["Category"].apply(
+                        lambda x: any(
+                            (isinstance(x, tuple) and ", ".join(str(i) for i in x) in cat_list) or
+                            (not isinstance(x, tuple) and x in cat_list)
+                        )
+                    )
+                    filtered_df = filtered_df[matched_rows]
                 
                 # Apply CR filter
                 if cr_only:
@@ -539,7 +577,15 @@ def display_ticket_finder(client_code: str, filters_container):
                 if types:
                     # Convert to list to ensure hashability
                     types_list = list(types) if isinstance(types, (list, tuple)) else [types]
-                    filtered_df = filtered_df[filtered_df["Ticket Type"].isin(types_list)]
+                    
+                    # Handle case when types are tuples in DataFrame but strings in filter
+                    matched_rows = filtered_df["Ticket Type"].apply(
+                        lambda x: any(
+                            (isinstance(x, tuple) and ", ".join(str(i) for i in x) in types_list) or
+                            (not isinstance(x, tuple) and x in types_list)
+                        )
+                    )
+                    filtered_df = filtered_df[matched_rows]
                     
                 if agents:
                     # Convert to list to ensure hashability

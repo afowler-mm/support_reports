@@ -80,9 +80,9 @@ if st.session_state.logged_in:
     ]
 
     if st.session_state.client_code == "admin":
+        pages.append(st.Page(watchlists, title="Watchlists", icon="👁️"))
         pages.append(st.Page(xero_export, title="Xero export", icon="💸"))
         pages.append(st.Page(supportbot, title="Support bot", icon="🤖"))
-        pages.append(st.Page(watchlists, title="Watchlists", icon="👁️"))
         # pages.append(st.Page(sandbox, title="Spreadsheet explorer", icon="📊"))
 
     # Navigation

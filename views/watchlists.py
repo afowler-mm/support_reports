@@ -158,7 +158,7 @@ def display_tickets_over_estimate(client_code: str, filter_groups=None, filter_p
     
     # Only show success toast for fresh data
     if not using_cached_data:
-        st.toast(f"✓ Found {len(tickets)} tickets to analyze", icon="✅")
+        st.toast(f"Found {len(tickets)} tickets to analyze", icon="✅")
     
     # Clean up status message
     fetch_status.empty()
@@ -267,7 +267,7 @@ def display_tickets_over_estimate(client_code: str, filter_groups=None, filter_p
     
     # Only show success toast for fresh data
     if not analysis_using_cached:
-        st.toast(f"✓ Analyzed {len(tickets)} tickets for time entries", icon="✅")
+        st.toast(f"Analyzed {len(tickets)} tickets for time entries", icon="✅")
     
     # Clear progress indicators
     progress_status.empty()
@@ -396,7 +396,7 @@ def display_aging_unresolved_tickets(client_code: str, filter_groups=None, filte
     
     # Only show success toast for fresh data
     if not using_cached_data:
-        st.toast(f"✓ Found {len(tickets)} tickets to analyze", icon="✅")
+        st.toast(f"Found {len(tickets)} tickets to analyze", icon="✅")
     
     # Clean up status message
     fetch_status.empty()
@@ -495,7 +495,7 @@ def display_aging_unresolved_tickets(client_code: str, filter_groups=None, filte
     
     # Only show success toast for fresh data
     if not analysis_using_cached:
-        st.toast(f"✓ Analyzed {len(tickets)} tickets for aging issues", icon="✅")
+        st.toast(f"Analyzed {len(tickets)} tickets for aging issues", icon="✅")
     
     # Clear progress indicators
     progress_status.empty()

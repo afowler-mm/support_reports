@@ -36,7 +36,7 @@ def display_ticket_finder(client_code: str, filters_container):
             
         # Only show success toast if it took some time (fresh data)
         if not using_cached_data:
-            st.toast(f"✓ Found {len(tickets)} tickets in the selected date range", icon="✅")
+            st.toast(f"Found {len(tickets)} tickets in the selected date range", icon="✅")
         
         # Always clean up the status
         fetch_status.empty()
@@ -121,7 +121,7 @@ def display_ticket_finder(client_code: str, filters_container):
                 
                 # Only show success toast for fresh data (not cached)
                 if not company_using_cached:
-                    st.toast(f"✓ Completed fetching company data for {total_companies} companies", icon="✅")
+                    st.toast(f"Completed fetching company data for {total_companies} companies", icon="✅")
                 
                 # Clean up the progress elements
                 company_status.empty()
@@ -237,7 +237,7 @@ def display_ticket_finder(client_code: str, filters_container):
             
             # Only show success toast for fresh data (not cached)
             if not agent_using_cached:
-                st.toast(f"✓ Completed fetching agent data for {total_agents} agents", icon="✅")
+                st.toast(f"Completed fetching agent data for {total_agents} agents", icon="✅")
             
             # Clear the progress elements
             agent_status.empty()
@@ -292,7 +292,7 @@ def display_ticket_finder(client_code: str, filters_container):
             
             # Only show success toast for fresh data (not cached)
             if not group_using_cached:
-                st.toast(f"✓ Completed fetching group data for {total_groups} groups", icon="✅")
+                st.toast(f"Completed fetching group data for {total_groups} groups", icon="✅")
             
             # Clear the progress elements
             group_status.empty()
@@ -463,9 +463,9 @@ def display_ticket_finder(client_code: str, filters_container):
                     # Show filtered vs total in the toast
                     search_result_count = len(tickets_df)
                     if search_result_count < pre_search_count:
-                        st.toast(f"✓ Search complete - found {search_result_count} of {pre_search_count} matches", icon="✅")
+                        st.toast(f"Search complete - found {search_result_count} of {pre_search_count} matches", icon="✅")
                     else:
-                        st.toast(f"✓ Search complete - found {search_result_count} matches", icon="✅")
+                        st.toast(f"Search complete - found {search_result_count} matches", icon="✅")
                     
                 # Always clean up immediately
                 text_status.empty()
@@ -522,7 +522,7 @@ def display_ticket_finder(client_code: str, filters_container):
                 
                 # Only show success toast for fresh data (not cached)
                 if not company_name_using_cached:
-                    st.toast(f"✓ Completed fetching company names for {total_cids} companies", icon="✅")
+                    st.toast(f"Completed fetching company names for {total_cids} companies", icon="✅")
                 
                 # Clear the progress elements
                 company_name_status.empty()
@@ -640,9 +640,9 @@ def display_ticket_finder(client_code: str, filters_container):
                 # Show filtered vs total in the toast
                 filter_result_count = len(tickets_df)
                 if filter_result_count < pre_filter_count:
-                    st.toast(f"✓ Filters applied - displaying {filter_result_count} of {pre_filter_count} tickets", icon="✅")
+                    st.toast(f"Filters applied - displaying {filter_result_count} of {pre_filter_count} tickets", icon="✅")
                 else:
-                    st.toast(f"✓ Filters applied - displaying {filter_result_count} tickets", icon="✅")
+                    st.toast(f"Filters applied - displaying {filter_result_count} tickets", icon="✅")
                 
             # Always clean up immediately
             filter_status.empty()

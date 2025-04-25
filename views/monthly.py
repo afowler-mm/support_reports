@@ -62,7 +62,7 @@ def display_monthly_report(client_code: str):
     
     # Only show success toast for fresh data
     if not using_cached_data and time_entries_data:
-        st.toast(f"✓ Found {len(time_entries_data)} time entries to analyze", icon="✅")
+        st.toast(f"Found {len(time_entries_data)} time entries to analyze", icon="✅")
     
     # Clean up status message
     fetch_status.empty()
@@ -223,7 +223,7 @@ def prepare_tickets_details_from_time_entries(time_entries_data, product_options
     # Only show success toast for fresh data
     if not analysis_using_cached:
         ticket_count = len(details.values())
-        st.toast(f"✓ Analysis complete - processed {ticket_count} tickets", icon="✅")
+        st.toast(f"Analysis complete - processed {ticket_count} tickets", icon="✅")
     
     # Clear progress indicators
     progress_status.empty()
@@ -257,7 +257,7 @@ def display_time_summary(tickets_details_df, company_data, start_date):
     
     # Only show success toast for fresh data
     if not contract_using_cached and 'error' not in support_data:
-        st.toast(f"✓ Loaded contract data for {month_datetime.strftime('%B %Y')}", icon="✅")
+        st.toast(f"Loaded contract data for {month_datetime.strftime('%B %Y')}", icon="✅")
     
     # Clean up status message
     contract_status.empty()

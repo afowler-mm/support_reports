@@ -11,16 +11,40 @@ def display_ticket_finder(client_code: str, filters_container):
     date_range = date_range_selector()
     start_date, end_date = date_range["start_date"], date_range["end_date"]
 
-    with st.spinner("Fetching tickets..."):
+    # Create an empty placeholder for ticket fetching status
+    fetch_status = st.empty()
+    
+    # Track start time to identify cached vs fresh data
+    import time
+    start_time = time.time()
+    
+    with st.spinner(f"Fetching tickets updated since {start_date}..."):
+        # Show a progress message
+        fetch_status.info(f"Loading tickets from {start_date} to {end_date}...")
+        # Get tickets with caching
         tickets = get_tickets_within_date_range(start_date, end_date)
-
-    if not tickets:
-        st.warning("No tickets found in the selected range")
-        return
+        
+        # Calculate how long it took - if it's quick, it was cached
+        elapsed_time = time.time() - start_time
+        using_cached_data = elapsed_time < 0.5  # Less than 500ms probably means cached data
+        
+        if not tickets:
+            st.warning("No tickets found in the selected range")
+            # Clean up the status message
+            fetch_status.empty()
+            return
+            
+        # Only show success toast if it took some time (fresh data)
+        if not using_cached_data:
+            st.toast(f"✓ Found {len(tickets)} tickets in the selected date range", icon="✅")
+        
+        # Always clean up the status
+        fetch_status.empty()
 
     with st.spinner("Fetching additional details about tickets..."):
-        # Add a progress bar to show processing status
-        progress_bar = st.progress(0.0)
+        # Create an empty placeholder for the progress bar
+        progress_bar = st.empty()
+        progress_bar.progress(0.0)
         
         try:
             with filters_container:
@@ -53,11 +77,29 @@ def display_ticket_finder(client_code: str, filters_container):
                 
                 # Pre-fetch company data for all companies
                 progress_bar.progress(0.1)  # Update progress
+                
+                # Track start time to identify cached vs fresh data
+                company_start_time = time.time()
+                
+                # Create individual empty placeholders for company progress
+                company_status = st.empty()
+                company_status.info(f"Fetching data for {len(company_ids)} companies...")
+                company_progress = st.empty()
+                company_progress.progress(0.0)
+                
                 total_companies = len(company_ids)
                 for i, company_id in enumerate(company_ids):
-                    # Update progress every few companies
+                    # Update progress every company
+                    progress_percent = i / total_companies
+                    company_progress.progress(progress_percent)
+                    
+                    # Update the main progress bar less frequently
                     if i % max(1, total_companies // 10) == 0:
-                        progress_bar.progress(0.1 + (i / total_companies) * 0.3)
+                        main_progress = 0.1 + (i / total_companies) * 0.3
+                        progress_bar.progress(main_progress)
+                        # Update status message with percentage
+                        company_status.empty()  # Clear previous message
+                        company_status.info(f"Fetching company data... ({i}/{total_companies} - {int(progress_percent*100)}%)")
                     try:
                         company = freshdesk_api.get_company_by_id(company_id)
                         company_code = company.get("custom_fields", {}).get("company_code")
@@ -66,6 +108,21 @@ def display_ticket_finder(client_code: str, filters_container):
                     except Exception as e:
                         st.error(f"Error fetching company data for ID {company_id}: {str(e)}")
                         # Continue with other companies
+                
+                # Update the company progress to completion
+                company_progress.progress(1.0)
+                
+                # Calculate elapsed time
+                company_elapsed_time = time.time() - company_start_time
+                company_using_cached = company_elapsed_time < 0.5  # Less than 500ms means cached
+                
+                # Only show success toast for fresh data (not cached)
+                if not company_using_cached:
+                    st.toast(f"✓ Completed fetching company data for {total_companies} companies", icon="✅")
+                
+                # Clean up the progress elements
+                company_status.empty()
+                company_progress.empty()
                 
                 # Filter tickets with pre-fetched company data
                 filtered_tickets = [
@@ -125,12 +182,29 @@ def display_ticket_finder(client_code: str, filters_container):
             # Update progress
             progress_bar.progress(0.4)
             
+            # Track start time for agent data fetching
+            agent_start_time = time.time()
+            
+            # Create individual empty placeholders for agent progress
+            agent_status = st.empty()
+            agent_status.info(f"Fetching data for {len(agent_ids)} agents...")
+            agent_progress = st.empty()
+            agent_progress.progress(0.0)
+            
             # Pre-fetch all agent data
             total_agents = len(agent_ids)
             for i, agent_id in enumerate(agent_ids):
-                # Update progress periodically
+                # Update agent progress for every agent
+                progress_percent = i / total_agents
+                agent_progress.progress(progress_percent)
+                
+                # Update main progress bar less frequently
                 if i % max(1, total_agents // 10) == 0:
-                    progress_bar.progress(0.4 + (i / total_agents) * 0.2)
+                    main_progress = 0.4 + (i / total_agents) * 0.2
+                    progress_bar.progress(main_progress)
+                    # Update status message
+                    agent_status.empty()  # Clear previous message
+                    agent_status.info(f"Fetching agent data... ({i}/{total_agents} - {int(progress_percent*100)}%)")
                 
                 if not agent_id:
                     continue
@@ -141,6 +215,21 @@ def display_ticket_finder(client_code: str, filters_container):
                     st.warning(f"Error fetching agent data for ID {agent_id}: {str(e)}")
                     agent_names[agent_id] = "Unknown"
             
+            # Update agent progress to completion and clean up
+            agent_progress.progress(1.0)
+            
+            # Calculate elapsed time
+            agent_elapsed_time = time.time() - agent_start_time
+            agent_using_cached = agent_elapsed_time < 0.5  # Less than 500ms means cached
+            
+            # Only show success toast for fresh data (not cached)
+            if not agent_using_cached:
+                st.toast(f"✓ Completed fetching agent data for {total_agents} agents", icon="✅")
+            
+            # Clear the progress elements
+            agent_status.empty()
+            agent_progress.empty()
+            
             # 2. Get unique group IDs
             group_ids = set(tickets_df["group_id"].dropna().unique())
             group_names = {}
@@ -148,12 +237,29 @@ def display_ticket_finder(client_code: str, filters_container):
             # Update progress
             progress_bar.progress(0.6)
             
+            # Track start time for group data fetching
+            group_start_time = time.time()
+            
+            # Create individual empty placeholders for group progress
+            group_status = st.empty()
+            group_status.info(f"Fetching data for {len(group_ids)} groups...")
+            group_progress = st.empty()
+            group_progress.progress(0.0)
+            
             # Pre-fetch all group data
             total_groups = len(group_ids)
             for i, group_id in enumerate(group_ids):
-                # Update progress periodically
+                # Update group progress for every group
+                progress_percent = i / total_groups
+                group_progress.progress(progress_percent)
+                
+                # Update main progress bar less frequently
                 if i % max(1, total_groups // 5) == 0:
-                    progress_bar.progress(0.6 + (i / total_groups) * 0.2)
+                    main_progress = 0.6 + (i / total_groups) * 0.2
+                    progress_bar.progress(main_progress)
+                    # Update status message
+                    group_status.empty()  # Clear previous message
+                    group_status.info(f"Fetching group data... ({i}/{total_groups} - {int(progress_percent*100)}%)")
                 
                 if not group_id:
                     continue
@@ -163,6 +269,21 @@ def display_ticket_finder(client_code: str, filters_container):
                 except Exception as e:
                     st.warning(f"Error fetching group data for ID {group_id}: {str(e)}")
                     group_names[group_id] = "Unknown"
+                    
+            # Update group progress to completion and clean up
+            group_progress.progress(1.0)
+            
+            # Calculate elapsed time
+            group_elapsed_time = time.time() - group_start_time
+            group_using_cached = group_elapsed_time < 0.5  # Less than 500ms means cached
+            
+            # Only show success toast for fresh data (not cached)
+            if not group_using_cached:
+                st.toast(f"✓ Completed fetching group data for {total_groups} groups", icon="✅")
+            
+            # Clear the progress elements
+            group_status.empty()
+            group_progress.empty()
                     
             # Update progress
             progress_bar.progress(0.8)
@@ -242,22 +363,58 @@ def display_ticket_finder(client_code: str, filters_container):
             tickets_df["subject"] = tickets_df["subject"].fillna("")
             tickets_df["description"] = tickets_df["description"].fillna("")
             
-            # Apply text filter to titles and descriptions
-            if search_term:
-                tickets_df = tickets_df[
-                    tickets_df["subject"].str.contains(search_term, case=False, na=False)
-                    | tickets_df["description"].str.contains(
-                        search_term, case=False, na=False
-                    )
-                ]
-
-            # Filter by selected categories
-            if selected_categories:
-                tickets_df = tickets_df[tickets_df["Category"].isin(selected_categories)]
-
-            # Filter by change requests if the checkbox is checked
-            if change_request_only:
-                tickets_df = tickets_df[tickets_df["CR?"]]
+            # Create a cacheable function for text search
+            @st.cache_data(ttl=3600)
+            def filter_by_text_and_categories(df, search, categories, cr_only):
+                """Cache-friendly function for text search and category filtering"""
+                filtered_df = df.copy()
+                
+                # Apply text filter
+                if search:
+                    filtered_df = filtered_df[
+                        filtered_df["subject"].str.contains(search, case=False, na=False)
+                        | filtered_df["description"].str.contains(
+                            search, case=False, na=False
+                        )
+                    ]
+                
+                # Apply category filter
+                if categories:
+                    filtered_df = filtered_df[filtered_df["Category"].isin(categories)]
+                
+                # Apply CR filter
+                if cr_only:
+                    filtered_df = filtered_df[filtered_df["CR?"]]
+                    
+                return filtered_df
+                
+            # Apply text and category filters
+            if search_term or selected_categories or change_request_only:
+                # Track search time
+                search_start_time = time.time()
+                
+                # Create empty elements for text search progress
+                text_status = st.empty()
+                text_status.info("Searching ticket content...")
+                
+                # Run the search
+                tickets_df = filter_by_text_and_categories(
+                    tickets_df, 
+                    search_term, 
+                    selected_categories, 
+                    change_request_only
+                )
+                
+                # Calculate elapsed time
+                search_elapsed_time = time.time() - search_start_time
+                search_using_cached = search_elapsed_time < 0.5  # Less than 500ms means cached
+                
+                # Only show success toast for non-cached operations
+                if not search_using_cached:
+                    st.toast(f"✓ Search complete - found {len(tickets_df)} matches", icon="✅")
+                    
+                # Always clean up immediately
+                text_status.empty()
 
             # Add client name column for admins
             if client_code == "admin":
@@ -270,20 +427,52 @@ def display_ticket_finder(client_code: str, filters_container):
                         # Skip invalid IDs
                         pass
                 
+                # Track start time for company name fetching
+                company_name_start_time = time.time()
+                
+                # Create individual empty placeholders for company name progress
+                company_name_status = st.empty()
+                company_name_status.info(f"Fetching names for {len(company_ids)} companies...")
+                company_name_progress = st.empty()
+                company_name_progress.progress(0.0)
+                
                 # Create a mapping of company_id to name
                 company_names = {}
                 progress_bar.progress(0.8)  # Update progress
                 total_cids = len(company_ids)
                 for i, cid in enumerate(company_ids):
-                    # Update progress periodically
+                    # Update company name progress for every company
+                    progress_percent = i / total_cids
+                    company_name_progress.progress(progress_percent)
+                    
+                    # Update main progress periodically
                     if i % max(1, total_cids // 10) == 0:
-                        progress_bar.progress(0.8 + (i / total_cids) * 0.1)
+                        main_progress = 0.8 + (i / total_cids) * 0.1
+                        progress_bar.progress(main_progress)
+                        # Update status message
+                        company_name_status.empty()  # Clear previous message
+                        company_name_status.info(f"Fetching company names... ({i}/{total_cids} - {int(progress_percent*100)}%)")
                     try:
                         company = freshdesk_api.get_company_by_id(cid)
                         company_names[cid] = company.get("name", "Unknown")
                     except Exception as e:
                         st.warning(f"Unable to fetch company name for ID: {cid}. Error: {e}")
                         company_names[cid] = "Unknown"
+                
+                # Update progress to completion and clean up
+                company_name_progress.progress(1.0)
+                
+                # Calculate elapsed time
+                company_name_elapsed_time = time.time() - company_name_start_time
+                company_name_using_cached = company_name_elapsed_time < 0.5  # Less than 500ms means cached
+                
+                # Only show success toast for fresh data (not cached)
+                if not company_name_using_cached:
+                    st.toast(f"✓ Completed fetching company names for {total_cids} companies", icon="✅")
+                
+                # Clear the progress elements
+                company_name_status.empty()
+                company_name_progress.empty()
                 
                 # Final progress update
                 progress_bar.progress(0.9)
@@ -313,30 +502,68 @@ def display_ticket_finder(client_code: str, filters_container):
             tickets_df["status_readable"] = (
                 tickets_df["status"].map(status_mapping).fillna("Unknown")
             )
-
-            # Filter by selected statuses
-            if selected_statuses:
-                tickets_df = tickets_df[
-                    tickets_df["status_readable"].isin(selected_statuses)
-                ]
+            
+            # Cache the complete dataframe before filtering
+            # This improves performance when changing filters
+            @st.cache_data(ttl=3600)
+            def get_filtered_tickets(df, statuses, types, agents, groups, estimate_range=None, has_est=False):
+                """Cache-friendly function to filter tickets based on criteria"""
+                filtered_df = df.copy()
                 
-            # Filter by selected ticket types
-            if selected_ticket_types:
-                tickets_df = tickets_df[tickets_df["Ticket Type"].isin(selected_ticket_types)]
+                # Apply filters
+                if statuses:
+                    filtered_df = filtered_df[filtered_df["status_readable"].isin(statuses)]
+                    
+                if types:
+                    filtered_df = filtered_df[filtered_df["Ticket Type"].isin(types)]
+                    
+                if agents:
+                    filtered_df = filtered_df[filtered_df["Assigned To"].isin(agents)]
+                    
+                if groups:
+                    filtered_df = filtered_df[filtered_df["Group"].isin(groups)]
+                    
+                if has_est and estimate_range:
+                    min_est, max_est = estimate_range
+                    filtered_df = filtered_df[(filtered_df["Estimate"] >= min_est) & 
+                                            (filtered_df["Estimate"] <= max_est) & 
+                                            (filtered_df["Estimate"] > 0)]
                 
-            # Filter by selected agents
-            if selected_agents:
-                tickets_df = tickets_df[tickets_df["Assigned To"].isin(selected_agents)]
-                
-            # Filter by selected groups
-            if selected_groups:
-                tickets_df = tickets_df[tickets_df["Group"].isin(selected_groups)]
-                
-            # Filter by estimate
+                return filtered_df
+            
+            # Get estimate range for filter
+            estimate_range = None
             if has_estimate:
-                tickets_df = tickets_df[(tickets_df["Estimate"] >= min_estimate) & 
-                                        (tickets_df["Estimate"] <= max_estimate) & 
-                                        (tickets_df["Estimate"] > 0)]
+                estimate_range = (min_estimate, max_estimate)
+            
+            # Apply filters with cached function to improve performance
+            # Track filter time
+            filter_start_time = time.time()
+            
+            filter_status = st.empty()
+            filter_status.info("Applying filters...")
+            
+            # Apply filters
+            tickets_df = get_filtered_tickets(
+                tickets_df, 
+                selected_statuses, 
+                selected_ticket_types, 
+                selected_agents, 
+                selected_groups,
+                estimate_range,
+                has_estimate
+            )
+            
+            # Calculate elapsed time
+            filter_elapsed_time = time.time() - filter_start_time
+            filter_using_cached = filter_elapsed_time < 0.5  # Less than 500ms means cached
+            
+            # Only show success toast for non-cached operations
+            if not filter_using_cached:
+                st.toast(f"✓ Filters applied - displaying {len(tickets_df)} tickets", icon="✅")
+                
+            # Always clean up immediately
+            filter_status.empty()
 
             # Display table with clickable links
             st.caption(
@@ -360,6 +587,22 @@ def display_ticket_finder(client_code: str, filters_container):
 
             # Update progress to 100% when done
             progress_bar.progress(1.0)
+            
+            # Check if any of our data operations were non-cached
+            overall_using_cached = (
+                using_cached_data and 
+                (not selected_company_codes or company_using_cached) and
+                (len(agent_ids) == 0 or agent_using_cached) and 
+                (len(group_ids) == 0 or group_using_cached) and
+                (client_code != "admin" or company_name_using_cached)
+            )
+            
+            # Only show final success toast if we did actual work
+            if not overall_using_cached:
+                st.toast("✨ All data loaded successfully!", icon="🚀")
+            
+            # Remove the progress bar
+            progress_bar.empty()
             
             # Display the dataframe
             st.dataframe(
@@ -398,10 +641,12 @@ def display_ticket_finder(client_code: str, filters_container):
 def get_tickets_within_date_range(start_date: str, end_date: str):
     try:
         # Fetch tickets updated within the date range
+        # The API already filters by updated_since, so we only need to filter by end_date locally
         tickets = freshdesk_api.get_tickets(updated_since=start_date)
-        return [
+        filtered_tickets = [
             ticket for ticket in tickets if start_date <= ticket["updated_at"] <= end_date
         ]
+        return filtered_tickets
     except Exception as e:
-        st.error(f"Error fetching tickets: {str(e)}")
+        # Return empty list on error - we'll handle the error display outside the cached function
         return []

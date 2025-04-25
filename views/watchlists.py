@@ -11,21 +11,77 @@ def display_watchlists(client_code: str):
     if client_code != "admin":
         st.warning("You must be an admin to view watchlists.")
         return
+        
+    # Initialize common sidebar filters
+    with st.sidebar:
+        st.header("Filters")
+        st.caption("Apply these filters to both watchlists")
+        
+        # Fetch groups using a safer approach
+        groups = []
+        try:
+            # Get groups from the tickets instead of assuming IDs
+            # This ensures we only show groups that actually have tickets
+            companies = freshdesk_api.get_companies()
+            sample_tickets = freshdesk_api.get_tickets()[:100]  # Limit to 100 recent tickets
+            
+            group_ids = set()
+            for ticket in sample_tickets:
+                if ticket.get('group_id'):
+                    group_ids.add(ticket.get('group_id'))
+            
+            for group_id in group_ids:
+                try:
+                    group = freshdesk_api.get_group(group_id)
+                    if group and 'name' in group:
+                        groups.append(group['name'])
+                except:
+                    # Skip if this group can't be fetched
+                    pass
+        except Exception as e:
+            st.warning(f"Could not fetch groups: {str(e)}")
+            
+        # Fetch all products for filtering
+        products = []
+        try:
+            product_options = freshdesk_api.get_product_options()
+            products = list(product_options.values())
+        except Exception as e:
+            st.warning(f"Could not fetch products: {str(e)}")
+            
+        # Create multiselect filters
+        selected_groups = st.multiselect("Filter by Group", ["All Groups"] + sorted(groups), default=["All Groups"])
+        selected_products = st.multiselect("Filter by Product", ["All Products"] + sorted(products), default=["All Products"])
+        
+        # Convert "All Groups/Products" selection to None for easier filtering
+        filter_groups = None if "All Groups" in selected_groups else selected_groups
+        filter_products = None if "All Products" in selected_products else selected_products
+        
+        st.divider()
 
     # Create tabs for different watchlists
     tabs = st.tabs(["Tickets over estimate", "Aging unresolved tickets"])
 
     # Tab 1: Tickets Over Estimate
     with tabs[0]:
-        display_tickets_over_estimate(client_code)
+        display_tickets_over_estimate(client_code, filter_groups, filter_products)
 
     # Tab 2: Aging Unresolved Tickets
     with tabs[1]:
-        display_aging_unresolved_tickets(client_code)
+        display_aging_unresolved_tickets(client_code, filter_groups, filter_products)
 
-def display_tickets_over_estimate(client_code: str):
+def display_tickets_over_estimate(client_code: str, filter_groups=None, filter_products=None):
     """Display tickets where time spent exceeds estimate."""
     st.subheader("Tickets over estimate")
+    
+    # Show active filters if any
+    if filter_groups or filter_products:
+        filters_text = []
+        if filter_groups:
+            filters_text.append(f"Groups: {', '.join(filter_groups)}")
+        if filter_products:
+            filters_text.append(f"Products: {', '.join(filter_products)}")
+        st.caption(f"Active filters: {' | '.join(filters_text)}")
 
     # Date selector for filtering
     col1, col2 = st.columns(2)
@@ -155,6 +211,12 @@ def display_tickets_over_estimate(client_code: str):
                 group = freshdesk_api.get_group(ticket['group_id'])
                 group_name = group.get('name', 'Unknown')
                 
+            # Get product information
+            product_name = "Unknown"
+            if ticket.get('product_id'):
+                product_options = freshdesk_api.get_product_options()
+                product_name = product_options.get(ticket.get('product_id'), "Unknown")
+                
             over_estimate_tickets.append({
                 'id': ticket_id,
                 'subject': ticket.get('subject', 'No subject'),
@@ -162,6 +224,7 @@ def display_tickets_over_estimate(client_code: str):
                 'company': company_name,
                 'assigned_to': agent_name,
                 'group': group_name,
+                'product_name': product_name,
                 'estimate': estimate,
                 'total_time': total_time,
                 'over_by': total_time - estimate,
@@ -202,12 +265,25 @@ def display_tickets_over_estimate(client_code: str):
     df['created_at'] = pd.to_datetime(df['created_at']).dt.strftime("%Y-%m-%d %H:%M:%S")
     df['updated_at'] = pd.to_datetime(df['updated_at']).dt.strftime("%Y-%m-%d %H:%M:%S")
     
-    # Display table
-    st.caption(f"Found {len(df)} tickets over estimate")
+    # Apply sidebar filters if provided
+    filtered_df = df.copy()
+    if filter_groups:
+        filtered_df = filtered_df[filtered_df['group'].isin(filter_groups)]
+    if filter_products:
+        filtered_df = filtered_df[filtered_df['product_name'].isin(filter_products)]
+    
+    # Show filter results
+    total_count = len(df)
+    filtered_count = len(filtered_df)
+    
+    if filtered_count < total_count:
+        st.caption(f"Found {filtered_count} of {total_count} tickets over estimate (after filtering)")
+    else:
+        st.caption(f"Found {total_count} tickets over estimate")
     
     st.dataframe(
-        df[['ticket_url', 'over_by_percent', 'subject', 'company', 'status', 'assigned_to', 'group', 
-            'estimate', 'total_time', 'over_by', 'updated_at']],
+        filtered_df[['ticket_url', 'over_by_percent', 'subject', 'company', 'status', 'assigned_to', 'group', 
+            'product_name', 'estimate', 'total_time', 'over_by', 'updated_at']],
         column_config={
             'ticket_url': st.column_config.LinkColumn("ID", display_text="tickets/(\d+)"),
             'over_by_percent': st.column_config.ProgressColumn("Over By (%)", format="%.1f%%", min_value=0, max_value=100),
@@ -216,6 +292,7 @@ def display_tickets_over_estimate(client_code: str):
             'status': "Status",
             'assigned_to': "Assigned To",
             'group': "Group",
+            'product_name': "Product",
             'estimate': st.column_config.NumberColumn("Estimate (h)", format="%.1f"),
             'total_time': st.column_config.NumberColumn("Total Time (h)", format="%.1f"),
             'over_by': st.column_config.NumberColumn("Over By (h)", format="%.1f"),
@@ -225,9 +302,18 @@ def display_tickets_over_estimate(client_code: str):
         height=600
     )
 
-def display_aging_unresolved_tickets(client_code: str):
+def display_aging_unresolved_tickets(client_code: str, filter_groups=None, filter_products=None):
     """Display unresolved tickets that have been open for a long time."""
     st.subheader("Aging unresolved tickets")
+    
+    # Show active filters if any
+    if filter_groups or filter_products:
+        filters_text = []
+        if filter_groups:
+            filters_text.append(f"Groups: {', '.join(filter_groups)}")
+        if filter_products:
+            filters_text.append(f"Products: {', '.join(filter_products)}")
+        st.caption(f"Active filters: {' | '.join(filters_text)}")
     
     # Get aging threshold in days
     days_threshold = st.slider("Days since last update", 7, 90, 30)
@@ -336,6 +422,12 @@ def display_aging_unresolved_tickets(client_code: str):
             
         # Get ticket type
         ticket_type = ticket['custom_fields'].get('cf_type', 'Unknown')
+        
+        # Get product information
+        product_name = "Unknown"
+        if ticket.get('product_id'):
+            product_options = freshdesk_api.get_product_options()
+            product_name = product_options.get(ticket.get('product_id'), "Unknown")
             
         # Calculate days since last update
         updated_date = datetime.datetime.strptime(updated_at.split('T')[0], '%Y-%m-%d').date()
@@ -348,6 +440,7 @@ def display_aging_unresolved_tickets(client_code: str):
             'company': company_name,
             'assigned_to': agent_name,
             'group': group_name,
+            'product_name': product_name,
             'ticket_type': ticket_type,
             'days_since_update': days_since_update,
             'created_at': ticket.get('created_at'),
@@ -386,12 +479,25 @@ def display_aging_unresolved_tickets(client_code: str):
     df['created_at'] = pd.to_datetime(df['created_at']).dt.strftime("%Y-%m-%d %H:%M:%S")
     df['updated_at'] = pd.to_datetime(df['updated_at']).dt.strftime("%Y-%m-%d %H:%M:%S")
     
-    # Display table
-    st.caption(f"Found {len(df)} aging tickets that haven't been updated in {days_threshold} days")
+    # Apply sidebar filters if provided
+    filtered_df = df.copy()
+    if filter_groups:
+        filtered_df = filtered_df[filtered_df['group'].isin(filter_groups)]
+    if filter_products:
+        filtered_df = filtered_df[filtered_df['product_name'].isin(filter_products)]
+    
+    # Show filter results
+    total_count = len(df)
+    filtered_count = len(filtered_df)
+    
+    if filtered_count < total_count:
+        st.caption(f"Found {filtered_count} of {total_count} aging tickets that haven't been updated in {days_threshold} days (after filtering)")
+    else:
+        st.caption(f"Found {total_count} aging tickets that haven't been updated in {days_threshold} days")
     
     st.dataframe(
-        df[['ticket_url', 'days_since_update', 'subject', 'company', 'status', 'assigned_to', 'group', 
-            'ticket_type', 'updated_at']],
+        filtered_df[['ticket_url', 'days_since_update', 'subject', 'company', 'status', 'assigned_to', 'group', 
+            'product_name', 'ticket_type', 'updated_at']],
         column_config={
             'ticket_url': st.column_config.LinkColumn("ID", display_text="tickets/(\d+)"),
             'subject': "Subject",
@@ -399,6 +505,7 @@ def display_aging_unresolved_tickets(client_code: str):
             'status': "Status",
             'assigned_to': "Assigned To",
             'group': "Group",
+            'product_name': "Product",
             'ticket_type': "Type",
             'days_since_update': st.column_config.ProgressColumn("Days Since Update", format="%d", min_value=0, max_value=days_threshold * 2),
             'updated_at': st.column_config.DatetimeColumn("Last Updated", format="ddd DD MMM YYYY, HH:mm z")

@@ -41,6 +41,9 @@ def display_ticket_finder(client_code: str, filters_container):
         # Always clean up the status
         fetch_status.empty()
 
+    # Store the initial ticket count before filtering
+    initial_ticket_count = len(tickets)
+    
     with st.spinner("Fetching additional details about tickets..."):
         # Create an empty placeholder for the progress bar
         progress_bar = st.empty()
@@ -397,6 +400,9 @@ def display_ticket_finder(client_code: str, filters_container):
                 text_status = st.empty()
                 text_status.info("Searching ticket content...")
                 
+                # Store ticket count before search filtering
+                pre_search_count = len(tickets_df)
+                
                 # Run the search
                 tickets_df = filter_by_text_and_categories(
                     tickets_df, 
@@ -411,7 +417,12 @@ def display_ticket_finder(client_code: str, filters_container):
                 
                 # Only show success toast for non-cached operations
                 if not search_using_cached:
-                    st.toast(f"✓ Search complete - found {len(tickets_df)} matches", icon="✅")
+                    # Show filtered vs total in the toast
+                    search_result_count = len(tickets_df)
+                    if search_result_count < pre_search_count:
+                        st.toast(f"✓ Search complete - found {search_result_count} of {pre_search_count} matches", icon="✅")
+                    else:
+                        st.toast(f"✓ Search complete - found {search_result_count} matches", icon="✅")
                     
                 # Always clean up immediately
                 text_status.empty()
@@ -503,6 +514,10 @@ def display_ticket_finder(client_code: str, filters_container):
                 tickets_df["status"].map(status_mapping).fillna("Unknown")
             )
             
+            # Store the count of tickets before applying filters (but after company filtering)
+            # This gives us a more accurate baseline for filter comparisons
+            base_ticket_count = len(tickets_df)
+            
             # Cache the complete dataframe before filtering
             # This improves performance when changing filters
             @st.cache_data(ttl=3600)
@@ -543,6 +558,9 @@ def display_ticket_finder(client_code: str, filters_container):
             filter_status = st.empty()
             filter_status.info("Applying filters...")
             
+            # Store ticket count before filtering
+            pre_filter_count = len(tickets_df)
+            
             # Apply filters
             tickets_df = get_filtered_tickets(
                 tickets_df, 
@@ -560,15 +578,39 @@ def display_ticket_finder(client_code: str, filters_container):
             
             # Only show success toast for non-cached operations
             if not filter_using_cached:
-                st.toast(f"✓ Filters applied - displaying {len(tickets_df)} tickets", icon="✅")
+                # Show filtered vs total in the toast
+                filter_result_count = len(tickets_df)
+                if filter_result_count < pre_filter_count:
+                    st.toast(f"✓ Filters applied - displaying {filter_result_count} of {pre_filter_count} tickets", icon="✅")
+                else:
+                    st.toast(f"✓ Filters applied - displaying {filter_result_count} tickets", icon="✅")
                 
             # Always clean up immediately
             filter_status.empty()
 
-            # Display table with clickable links
-            st.caption(
-                f"Displaying {len(tickets_df)} tickets updated between {start_date} and {end_date}"
+            # Check if any filters are applied
+            current_ticket_count = len(tickets_df)
+            filters_applied = (
+                search_term or 
+                selected_categories or 
+                change_request_only or
+                selected_statuses or
+                selected_ticket_types or
+                selected_agents or
+                selected_groups or
+                has_estimate
             )
+            
+            # Display table with clickable links, showing filter information if relevant
+            if filters_applied and current_ticket_count < base_ticket_count:
+                # Show both filtered count and total count when filters reduce the number of tickets shown
+                st.caption(
+                    f"Displaying {current_ticket_count} of {base_ticket_count} tickets updated between {start_date} and {end_date} (filters applied)"
+                )
+            else:
+                st.caption(
+                    f"Displaying {current_ticket_count} tickets updated between {start_date} and {end_date}"
+                )
             display_columns = [
                 "ticket_url",
                 "subject",

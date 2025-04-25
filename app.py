@@ -37,9 +37,15 @@ if not st.session_state.logged_in:
         st.rerun()
 
 if st.session_state.logged_in:
-    # Sidebar containers
+    # Sidebar containers - ensure filters are always above user info
     with st.sidebar:
+        # Container for filters - all page filters will use this
         filters_container = st.container()
+        
+        # Divider between filters and user controls
+        st.divider()
+        
+        # User info and logout at the bottom
         with st.container():
             st.header(f"Welcome, {st.session_state.client_code}!")
             if st.button("Logout"):
@@ -71,7 +77,7 @@ if st.session_state.logged_in:
         
     def watchlists():
         st.title("Watchlists")
-        display_watchlists(st.session_state.client_code)
+        display_watchlists(st.session_state.client_code, filters_container)
 
     # Page navigation configuration
     pages = [

@@ -5,15 +5,18 @@ from datetime import timedelta
 from apis.freshdesk import freshdesk_api
 from logic import status_mapping
 
-def display_watchlists(client_code: str):
+def display_watchlists(client_code: str, filters_container=None):
     """Display watchlists for admin users."""
     # Verify user is admin
     if client_code != "admin":
         st.warning("You must be an admin to view watchlists.")
         return
         
-    # Initialize common sidebar filters
-    with st.sidebar:
+    # Initialize common filters
+    # Use the provided filters_container if available, else create a new one in main content
+    filter_container = filters_container if filters_container else st.container()
+    
+    with filter_container:
         st.header("Filters")
         st.caption("Apply these filters to both watchlists")
         
@@ -56,8 +59,6 @@ def display_watchlists(client_code: str):
         # Convert "All Groups/Products" selection to None for easier filtering
         filter_groups = None if "All Groups" in selected_groups else selected_groups
         filter_products = None if "All Products" in selected_products else selected_products
-        
-        st.divider()
 
     # Create tabs for different watchlists
     tabs = st.tabs(["Tickets over estimate", "Aging unresolved tickets"])

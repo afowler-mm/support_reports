@@ -68,11 +68,17 @@ def prepare_tickets_details_from_time_entries(time_entries_data, product_options
     details = defaultdict(lambda: {
         'time_spent_this_month': 0.0,
         'billable_time_this_month': 0.0,
+        'total_time_spent': 0.0,
+        'total_billable_time': 0.0,
         'ticket_id': None,
         'title': None,
         'requester_name': "Unknown",
         'product_name': "Unknown",
-        'billing_status': "Unknown"
+        'billing_status': "Unknown",
+        'estimate': 0.0,
+        'ticket_type': "Unknown",
+        'group_name': "Unknown",
+        'agent_name': "Unknown"
     })
 
     for entry in time_entries_data:
@@ -87,6 +93,17 @@ def prepare_tickets_details_from_time_entries(time_entries_data, product_options
             requester = freshdesk_api.get_requester(ticket_data['requester_id'])
             requester_name = requester.get('name', 'Unknown')
         
+        # Get agent and group information
+        agent_name = "Unassigned"
+        if ticket_data.get('responder_id'):
+            agent = freshdesk_api.get_agent(ticket_data['responder_id'])
+            agent_name = agent.get('contact', {}).get('name', 'Unknown')
+        
+        group_name = "None"
+        if ticket_data.get('group_id'):
+            group = freshdesk_api.get_group(ticket_data['group_id'])
+            group_name = group.get('name', 'Unknown')
+            
         product_name = product_options.get(ticket_data.get('product_id'), "Unknown")
 
         # Aggregate time spent
@@ -104,6 +121,28 @@ def prepare_tickets_details_from_time_entries(time_entries_data, product_options
         ticket_detail['product_name'] = product_name
         ticket_detail['billing_status'] = ticket_data['custom_fields'].get('billing_status', 'Unknown')
         ticket_detail['change_request'] = ticket_data['custom_fields'].get('change_request', False)
+        estimate_value = ticket_data['custom_fields'].get('estimate_hrs')
+        if estimate_value and isinstance(estimate_value, str) and estimate_value.replace('.', '', 1).isdigit():
+            # If it's a string representing a number, convert to float
+            ticket_detail['estimate'] = float(estimate_value)
+        else:
+            ticket_detail['estimate'] = 0.0
+        ticket_detail['ticket_type'] = ticket_data['custom_fields'].get('cf_type', 'Unknown')
+        ticket_detail['group_name'] = group_name
+        ticket_detail['agent_name'] = agent_name
+        
+        # Get the total time spent on this ticket (all time, not just this month)
+        try:
+            all_time_entries = freshdesk_api.get_time_entries(ticket_id=ticket_id)
+            total_time = sum([float(entry.get('time_spent_in_seconds', 0)) / 3600.0 for entry in all_time_entries])
+            total_billable = sum([calculate_billable_time(entry, ticket_data, float(entry.get('time_spent_in_seconds', 0)) / 3600.0, product_options) for entry in all_time_entries])
+            ticket_detail['total_time_spent'] = total_time
+            ticket_detail['total_billable_time'] = total_billable
+        except Exception as e:
+            # If there's an error fetching total time, just use the current month's time
+            st.warning(f"Could not fetch total time for ticket #{ticket_id}: {str(e)}")
+            ticket_detail['total_time_spent'] = ticket_detail['time_spent_this_month']
+            ticket_detail['total_billable_time'] = ticket_detail['billable_time_this_month']
 
     return list(details.values())
 
@@ -216,19 +255,31 @@ def _display_tickets_table(tickets_details_df):
         "ticket_url", 
         "title",
         "time_spent_this_month", 
-        "billable_time_this_month", 
+        "billable_time_this_month",
+        "total_time_spent",
+        "total_billable_time", 
+        "estimate",
         "requester_name",
+        "agent_name",
+        "group_name",
         "product_name",
+        "ticket_type",
         "change_request"
     ]].copy()
 
     display_df.rename(columns={
         "ticket_url": "Ticket",
         "title": "Title",
-        "time_spent_this_month": "Time tracked",
-        "billable_time_this_month": "Billable time",
+        "time_spent_this_month": "Time tracked this month",
+        "billable_time_this_month": "Billable time this month",
+        "total_time_spent": "Total time tracked",
+        "total_billable_time": "Total billable time",
+        "estimate": "Estimate (h)",
         "requester_name": "Filed by",
+        "agent_name": "Assigned to",
+        "group_name": "Group",
         "product_name": "Product",
+        "ticket_type": "Type",
         "change_request": "CR?"
     }, inplace=True)
 
@@ -238,6 +289,18 @@ def _display_tickets_table(tickets_details_df):
             "Ticket": st.column_config.LinkColumn(
                 "ID",
                 display_text="tickets/(\\d+)"
+            ),
+            "Estimate (h)": st.column_config.NumberColumn(
+                "Estimate (h)",
+                format="%.1f"
+            ),
+            "Total time tracked": st.column_config.NumberColumn(
+                "Total time tracked",
+                format="%.1f"
+            ),
+            "Total billable time": st.column_config.NumberColumn(
+                "Total billable time",
+                format="%.1f"
             ),
         },
         hide_index=True,

@@ -75,10 +75,45 @@ def display_ticket_finder(client_code: str, filters_container):
                 lambda x: x.get("change_request", False)
             )
 
-            # Add category column (custom field)
+            # Add custom fields as columns
             tickets_df["Category"] = tickets_df["custom_fields"].apply(
                 lambda x: x.get("category", "Unknown")
             )
+            
+            tickets_df["Ticket Type"] = tickets_df["custom_fields"].apply(
+                lambda x: x.get("cf_type", "Unknown")
+            )
+            
+            # Extract estimate from custom fields
+            def extract_estimate(custom_fields):
+                estimate_value = custom_fields.get("estimate_hrs")
+                if estimate_value and isinstance(estimate_value, str) and estimate_value.replace('.', '', 1).isdigit():
+                    return float(estimate_value)
+                return 0.0
+                
+            tickets_df["Estimate"] = tickets_df["custom_fields"].apply(extract_estimate)
+            
+            # Add agent and group information
+            def get_agent_name(agent_id):
+                if not agent_id:
+                    return "Unassigned"
+                try:
+                    agent = freshdesk_api.get_agent(agent_id)
+                    return agent.get("contact", {}).get("name", "Unknown")
+                except:
+                    return "Unknown"
+            
+            def get_group_name(group_id):
+                if not group_id:
+                    return "None"
+                try:
+                    group = freshdesk_api.get_group(group_id)
+                    return group.get("name", "Unknown")
+                except:
+                    return "Unknown"
+            
+            tickets_df["Assigned To"] = tickets_df["responder_id"].apply(get_agent_name)
+            tickets_df["Group"] = tickets_df["group_id"].apply(get_group_name)
 
             with filters_container:
 
@@ -107,6 +142,30 @@ def display_ticket_finder(client_code: str, filters_container):
                 selected_statuses = st.pills(
                     "Filter by status", status_options_readable, selection_mode="multi"
                 )
+                
+                # Add ticket type filter
+                ticket_type_options = sorted(tickets_df["Ticket Type"].unique().tolist())
+                selected_ticket_types = st.multiselect("Filter by ticket type", ticket_type_options)
+                
+                # Add agent filter
+                agent_options = sorted(tickets_df["Assigned To"].unique().tolist())
+                selected_agents = st.multiselect("Filter by assigned agent", agent_options)
+                
+                # Add group filter 
+                group_options = sorted(tickets_df["Group"].unique().tolist())
+                selected_groups = st.multiselect("Filter by group", group_options)
+                
+                # Add estimate filter
+                has_estimate = st.checkbox("Has estimate", value=False)
+                
+                if has_estimate:
+                    min_estimate, max_estimate = st.slider(
+                        "Estimate range (hours)",
+                        min_value=0.0,
+                        max_value=float(tickets_df["Estimate"].max()) if len(tickets_df) > 0 else 40.0,
+                        value=(0.1, float(tickets_df["Estimate"].max()) if len(tickets_df) > 0 else 40.0),
+                        step=0.5
+                    )
                 
                 change_request_only = st.checkbox("Show change requests only", value=False)
 
@@ -165,6 +224,24 @@ def display_ticket_finder(client_code: str, filters_container):
                 tickets_df = tickets_df[
                     tickets_df["status_readable"].isin(selected_statuses)
                 ]
+                
+            # Filter by selected ticket types
+            if selected_ticket_types:
+                tickets_df = tickets_df[tickets_df["Ticket Type"].isin(selected_ticket_types)]
+                
+            # Filter by selected agents
+            if selected_agents:
+                tickets_df = tickets_df[tickets_df["Assigned To"].isin(selected_agents)]
+                
+            # Filter by selected groups
+            if selected_groups:
+                tickets_df = tickets_df[tickets_df["Group"].isin(selected_groups)]
+                
+            # Filter by estimate
+            if has_estimate:
+                tickets_df = tickets_df[(tickets_df["Estimate"] >= min_estimate) & 
+                                        (tickets_df["Estimate"] <= max_estimate) & 
+                                        (tickets_df["Estimate"] > 0)]
 
         # Display table with clickable links
         st.caption(
@@ -174,8 +251,12 @@ def display_ticket_finder(client_code: str, filters_container):
             "ticket_url",
             "subject",
             "Category",
+            "Ticket Type",
             "status_readable",
             "CR?",
+            "Estimate",
+            "Assigned To",
+            "Group",
             "created_at",
             "updated_at",
         ]
@@ -190,8 +271,12 @@ def display_ticket_finder(client_code: str, filters_container):
             ),
             "subject": st.column_config.TextColumn("Subject"),
             "Category": st.column_config.TextColumn("Category"),
+            "Ticket Type": st.column_config.TextColumn("Type"),
             "status_readable": st.column_config.TextColumn("Status"),
             "CR?": st.column_config.CheckboxColumn("CR?"),
+            "Estimate": st.column_config.NumberColumn("Estimate (h)", format="%.1f"),
+            "Assigned To": st.column_config.TextColumn("Assigned To"),
+            "Group": st.column_config.TextColumn("Group"),
             "created_at": st.column_config.DatetimeColumn(
                 "Created", format="ddd DD MMM YYYY, HH:mm z"
             ),

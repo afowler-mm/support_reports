@@ -64,11 +64,27 @@ class FreshdeskAPI:
         return {p['id']: p['name'] for p in products}
 
     @st.cache_resource(ttl=3600)
-    def get_time_entries(_self, start_date: str, end_date: str, company_id: Optional[int]=None) -> List[Dict]:
+    def get_time_entries(_self, start_date: Optional[str]=None, end_date: Optional[str]=None, company_id: Optional[int]=None, ticket_id: Optional[int]=None) -> List[Dict]:
         # start_date and end_date are expected as YYYY-MM-DD strings
-        url = f"{_self.base_url}/time_entries?executed_before={end_date}&executed_after={start_date}"
+        # Build query params
+        params = []
+        
+        if start_date:
+            params.append(f"executed_after={start_date}")
+        if end_date:
+            params.append(f"executed_before={end_date}")
         if company_id is not None:
-            url += f"&company_id={company_id}"
+            params.append(f"company_id={company_id}")
+            
+        # The FreshDesk API handles ticket-specific time entries differently
+        if ticket_id is not None:
+            url = f"{_self.base_url}/tickets/{ticket_id}/time_entries"
+        else:
+            url = f"{_self.base_url}/time_entries"
+            
+        # Add query parameters if we have any
+        if params:
+            url += f"?{'&'.join(params)}"
 
         results = []
         for page_data in _self._get_paginated(url):

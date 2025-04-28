@@ -421,10 +421,8 @@ def display_ticket_finder(client_code: str, filters_container):
                     
                     # Handle case when categories are tuples in DataFrame but strings in filter
                     matched_rows = filtered_df["Category"].apply(
-                        lambda x: any(
-                            (isinstance(x, tuple) and ", ".join(str(i) for i in x) in cat_list) or
-                            (not isinstance(x, tuple) and x in cat_list)
-                        )
+                        lambda x: (isinstance(x, tuple) and ", ".join(str(i) for i in x) in cat_list) or
+                               (not isinstance(x, tuple) and x in cat_list)
                     )
                     filtered_df = filtered_df[matched_rows]
                 
